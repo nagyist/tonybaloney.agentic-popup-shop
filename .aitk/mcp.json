@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "zava-finance-agent": {
+      "type": "http",
+      "url": "http://localhost:28001/mcp",
+      "headers": {"Authorization": "Bearer dev-guest-token"}
+    },
+    "zava-supplier-agent": {
+      "type": "http",
+      "url": "http://localhost:28002/mcp",
+      "headers": {"Authorization": "Bearer dev-guest-token"}
+    }
+  }
+}
