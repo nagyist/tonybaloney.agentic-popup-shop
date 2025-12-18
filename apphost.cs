@@ -45,16 +45,12 @@ var agentDev = builder.AddPythonModule("agent-dev", "./app/agents/", "zava_shop_
     .WithEnvironment("OTEL_PYTHON_EXCLUDED_URLS", "/health")
     .WithEnvironment("FINANCE_MCP_HTTP", financeMcp.GetEndpoint("http"))
     .WithEnvironment("SUPPLIER_MCP_HTTP", supplierMcp.GetEndpoint("http"))
-    // OpenAI settings
-    .WithEnvironment("AZURE_OPENAI_ENDPOINT_GPT5", envVars["AZURE_OPENAI_ENDPOINT_GPT5"])
-    .WithEnvironment("AZURE_OPENAI_API_KEY_GPT5", envVars["AZURE_OPENAI_API_KEY_GPT5"])
-    .WithEnvironment("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5", envVars["AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"])
-    .WithEnvironment("AZURE_OPENAI_ENDPOINT_VERSION_GPT5", envVars["AZURE_OPENAI_ENDPOINT_VERSION_GPT5"])
     // Agent SDK
     .WithEnvironment("AZURE_AI_PROJECT_ENDPOINT", envVars["AZURE_AI_PROJECT_ENDPOINT"])
     .WithEnvironment("AZURE_AI_PROJECT_API_KEY", envVars["AZURE_AI_PROJECT_API_KEY"])
     .WithEnvironment("AZURE_AI_PROJECT_AGENT_VERSION", envVars["AZURE_AI_PROJECT_AGENT_VERSION"])
     .WithEnvironment("AZURE_AI_PROJECT_AGENT_ID", envVars["AZURE_AI_PROJECT_AGENT_ID"])
+    .WithEnvironment("AZURE_AI_MODEL_DEPLOYMENT_NAME", envVars["AZURE_AI_MODEL_DEPLOYMENT_NAME"])
     // Insights search
     .WithEnvironment("OPENWEATHER_API_KEY", envVars["OPENWEATHER_API_KEY"])
     .WithEnvironment("BING_CUSTOM_CONNECTION_ID", envVars["BING_CUSTOM_CONNECTION_ID"])

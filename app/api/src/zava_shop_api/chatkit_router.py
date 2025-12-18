@@ -49,7 +49,7 @@ chat_client = AzureAIClient(
     async_credential=DefaultAzureCredential(),
     agent_name=os.environ.get("AZURE_AI_PROJECT_AGENT_ID", "zava-customer-agent"),
     agent_version=agent_version,
-    model_deployment_name=os.environ.get("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5", "gpt-5-mini")
+    model_deployment_name=os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
 )
 
 class ChatKitContext(BaseModel):
