@@ -15,13 +15,13 @@ from agent_framework import (
     WorkflowEvent,
     handler,
 )
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 
 from pydantic import BaseModel
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
 
-chat_client = AzureAIAgentClient(
+chat_client = AzureAIClient(
     async_credential=DefaultAzureCredential(
         exclude_shared_token_cache_credential=True,
         exclude_visual_studio_code_credential=True,

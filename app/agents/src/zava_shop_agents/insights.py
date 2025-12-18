@@ -17,7 +17,7 @@ from agent_framework import (
     handler,
     HostedWebSearchTool,
 )
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
 
@@ -66,7 +66,7 @@ WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_API_TIMEOUT = 10.0
 DEFAULT_AZURE_API_VERSION = "2024-02-15-preview"
 
-azure_ai_client = AzureAIAgentClient(
+azure_ai_client = AzureAIClient(
     async_credential=DefaultAzureCredential(
         exclude_shared_token_cache_credential=True,
         exclude_visual_studio_code_credential=True,

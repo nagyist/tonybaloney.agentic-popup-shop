@@ -8,7 +8,7 @@ import asyncio
 import os
 
 from agent_framework import ChatAgent, MCPStdioTool, MCPStreamableHTTPTool, ToolProtocol
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework_azure_ai import AzureAIClient
 from agent_framework.openai import OpenAIChatClient
 from openai import AsyncOpenAI
 from azure.identity.aio import DefaultAzureCredential
@@ -41,7 +41,7 @@ async def main() -> None:
     async with (
         DefaultAzureCredential() as credential,
         ChatAgent(
-            chat_client=AzureAIAgentClient(
+            chat_client=AzureAIClient(
                 project_endpoint=ENDPOINT,
                 model_deployment_name=MODEL_DEPLOYMENT_NAME,
                 async_credential=credential,

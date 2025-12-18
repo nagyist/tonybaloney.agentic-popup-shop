@@ -10,13 +10,13 @@ from agent_framework import (
     WorkflowContext,
     handler,
 )
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 
 from pydantic import BaseModel
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
 
-chat_client = AzureAIAgentClient(
+chat_client = AzureAIClient(
     async_credential=DefaultAzureCredential(
         exclude_shared_token_cache_credential=True,
         exclude_visual_studio_code_credential=True,
@@ -76,7 +76,7 @@ class StockExtractor(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, openai_client: AzureAIAgentClient, id: str = "Stock Agent"):
+    def __init__(self, openai_client: AzureAIClient, id: str = "Stock Agent"):
         self.openai_client = openai_client
         # Create agent once with tools
         self.agent = openai_client.create_agent(
@@ -102,7 +102,7 @@ class ContextExecutor(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, responses_client: AzureAIAgentClient, id: str = "Prioritization Agent"):
+    def __init__(self, responses_client: AzureAIClient, id: str = "Prioritization Agent"):
         # Create a domain specific agent using your configured AzureOpenAIChatClient.
         self.agent = responses_client.create_agent(
             name= id,
@@ -132,7 +132,7 @@ class Summarizer(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, chat_client: AzureAIAgentClient, id: str = "Summarizer Agent"):
+    def __init__(self, chat_client: AzureAIClient, id: str = "Summarizer Agent"):
         # Create a domain specific agent that summarizes content.
         self.agent = chat_client.create_agent(
             name= id,
