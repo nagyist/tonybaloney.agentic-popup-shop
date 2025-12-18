@@ -39,3 +39,20 @@ Close the terminal and reopen it so that PATH changes take effect. Clone the rep
 ## Using the app
 
 Once aspire and the services have started, open the URL for the frontend site (`http://localhost:28000/` by default) to navigate the store.
+
+## Deployment
+
+To deploy, use the Azure Developer CLI.
+
+```
+azd init --template ./
+azd up
+```
+
+### Adding ChatKit Domain Key
+
+This is required for the user chat agent
+
+```
+azd env set CHATKIT_DOMAIN_KEY=
+```
