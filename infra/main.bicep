@@ -167,14 +167,18 @@ module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
     containerRegistryName: containerApps.outputs.registryName
     ingressEnabled: true
     identityType: 'UserAssigned'
-    exists: apiAppExists
-    containerName: 'main'
     identityName: apiIdentity.name
     userAssignedIdentityResourceId: apiIdentity.outputs.resourceId
-    containerMinReplicas: 1
     identityPrincipalId: apiIdentity.outputs.principalId
+    exists: apiAppExists
+    containerName: 'main'
+    containerMinReplicas: 1
     targetPort: 8000
     env:[
+      {
+        name: 'AZURE_CLIENT_ID'
+        value: apiIdentity.outputs.clientId
+      }
       {
         name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
         value: monitoring.outputs.applicationInsightsConnectionString
@@ -189,7 +193,7 @@ module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
       }
       {
         name: 'AZURE_AI_PROJECT_ENDPOINT'
-        value: 'https://${aiFoundry.outputs.aiProjectName}.services.ai.azure.com/api/projects/${aiFoundry.outputs.aiProjectName}'
+        value: 'https://${aiFoundry.outputs.aiServicesName}.services.ai.azure.com/api/projects/${aiFoundry.outputs.aiProjectName}'
       }
       {
         name: 'AZURE_AI_MODEL_DEPLOYMENT_NAME'
@@ -198,6 +202,17 @@ module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
     ]
   }
 }
+
+// Role assignment for this app to access the foundry account
+module roleAssignment 'br/public:avm/res/authorization/role-assignment/rg-scope:0.1.1' = {
+  scope: rg
+  params: {
+    principalId: apiIdentity.outputs.principalId
+    roleDefinitionIdOrName: '/providers/Microsoft.Authorization/roleDefinitions/53ca6127-db72-4b80-b1b0-d745d6d5456d' // Azure AI User
+    principalType: 'ServicePrincipal'
+  }
+}
+
 
 module web 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
   name: 'web-container-app'
