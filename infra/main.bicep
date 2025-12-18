@@ -9,8 +9,14 @@ param environmentName string
 @description('Primary location for all resources.')
 param location string
 
+@description('Chatkit domain key for the application. Get from openai.com')
+param chatkitDomainKey string = ''
+
 // Used by azd for upsert/create calls
 param webAppExists bool = false
+param apiAppExists bool = false
+param supplierMcpAppExists bool = false
+param financeMcpAppExists bool = false
 
 param resourceGroupName string = ''
 
@@ -43,6 +49,7 @@ module containerApps 'br/public:avm/ptn/azd/container-apps-stack:0.3.0' = {
   name: 'container-apps'
   scope: rg
   params: {
+    publicNetworkAccess: 'Enabled'
     containerAppsEnvironmentName: 'ame-${resourceToken}'
     containerRegistryName: 'acr${resourceToken}'
     logAnalyticsWorkspaceName: monitoring.outputs.logAnalyticsWorkspaceName
@@ -64,6 +71,94 @@ module webIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.
   }
 }
 
+module financeMcp 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
+  name: 'finance-mcp-container-app'
+  scope: rg
+  params: {
+    name: 'finance-mcp-${resourceToken}'
+    tags: union(tags, { 'azd-service-name': 'finance-mcp' })
+    location: location
+    containerAppsEnvironmentName: containerApps.outputs.environmentName
+    containerRegistryName: containerApps.outputs.registryName
+    ingressEnabled: true
+    identityType: 'SystemAssigned'
+    exists: financeMcpAppExists
+    containerName: 'main'
+    containerMinReplicas: 1
+    env:[
+      {
+        name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+        value: monitoring.outputs.applicationInsightsConnectionString
+      }
+      {
+        name: 'PORT'
+        value: '80'
+      }
+    ]
+  }
+}
+
+module supplierMcp 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
+  name: 'supplier-mcp-container-app'
+  scope: rg
+  params: {
+    name: 'supplier-mcp-${resourceToken}'
+    tags: union(tags, { 'azd-service-name': 'supplier-mcp' })
+    location: location
+    containerAppsEnvironmentName: containerApps.outputs.environmentName
+    containerRegistryName: containerApps.outputs.registryName
+    ingressEnabled: true
+    identityType: 'SystemAssigned'
+    exists: supplierMcpAppExists
+    containerName: 'main'
+    containerMinReplicas: 1
+    env:[
+      {
+        name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+        value: monitoring.outputs.applicationInsightsConnectionString
+      }
+      {
+        name: 'PORT'
+        value: '80'
+      }
+    ]
+  }
+}
+
+module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
+  name: 'api-container-app'
+  scope: rg
+  params: {
+    name: 'api-${resourceToken}'
+    tags: union(tags, { 'azd-service-name': 'api' })
+    location: location
+    containerAppsEnvironmentName: containerApps.outputs.environmentName
+    containerRegistryName: containerApps.outputs.registryName
+    ingressEnabled: true
+    identityType: 'UserAssigned'
+    exists: apiAppExists
+    containerName: 'main'
+    identityName: webIdentity.name
+    userAssignedIdentityResourceId: webIdentity.outputs.resourceId
+    containerMinReplicas: 1
+    identityPrincipalId: webIdentity.outputs.principalId
+    env:[
+      {
+        name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+        value: monitoring.outputs.applicationInsightsConnectionString
+      }
+      {
+        name: 'FINANCE_MCP_HTTP'
+        value: financeMcp.outputs.uri
+      }
+      {
+        name: 'SUPPLIER_MCP_HTTP'
+        value: supplierMcp.outputs.uri
+      }
+    ]
+  }
+}
+
 module web 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
   name: 'web-container-app'
   scope: rg
@@ -81,5 +176,35 @@ module web 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
     userAssignedIdentityResourceId: webIdentity.outputs.resourceId
     containerMinReplicas: 1
     identityPrincipalId: webIdentity.outputs.principalId
+    env:[
+      {
+        name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+        value: monitoring.outputs.applicationInsightsConnectionString
+      }
+      {
+        name: 'VITE_CHATKIT_DOMAIN_KEY'
+        value: chatkitDomainKey
+      }
+      {
+        name: 'API_HOST'
+        value: api.outputs.uri
+      }
+    ]
   }
 }
+
+output APPLICATIONINSIGHTS_CONNECTION_STRING string = monitoring.outputs.applicationInsightsConnectionString
+output APPLICATIONINSIGHTS_NAME string = monitoring.outputs.applicationInsightsName
+output AZURE_CONTAINER_ENVIRONMENT_NAME string = containerApps.outputs.environmentName
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerApps.outputs.registryLoginServer
+output AZURE_CONTAINER_REGISTRY_NAME string = containerApps.outputs.registryName
+// output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.uri
+// output AZURE_KEY_VAULT_NAME string = keyVault.outputs.name
+output AZURE_LOCATION string = location
+output AZURE_TENANT_ID string = tenant().tenantId
+// output API_BASE_URL string = useAPIM ? apimApi.outputs.serviceApiUri : api.outputs.uri
+output REACT_APP_WEB_BASE_URL string = web.outputs.uri
+// output SERVICE_API_NAME string = api.outputs.name
+output SERVICE_WEB_NAME string = web.outputs.name
+// output USE_APIM bool = useAPIM
+// output SERVICE_API_ENDPOINTS array = useAPIM ? [ apimApi.outputs.serviceApiUri, api.outputs.uri ] : []

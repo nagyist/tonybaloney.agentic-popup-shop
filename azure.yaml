@@ -13,3 +13,22 @@ services:
     project: ./frontend
     language: js
     host: containerapp
+  api:
+    project: ./app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile.api
+  finance-mcp:
+    project: ./app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile.financemcp
+  supplier-mcp:
+    project: ./app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile.suppliermcp
+  

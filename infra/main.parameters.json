@@ -10,6 +10,18 @@
     },
     "webAppExists": {
       "value": "${SERVICE_WEB_RESOURCE_EXISTS=false}"
+    },
+    "apiAppExists": {
+      "value": "${SERVICE_API_RESOURCE_EXISTS=false}"
+    },
+    "supplierMcpAppExists": {
+      "value": "${SERVICE_SUPPLIER_MCP_RESOURCE_EXISTS=false}"
+    },
+    "financeMcpAppExists": {
+      "value": "${SERVICE_FINANCE_MCP_RESOURCE_EXISTS=false}"
+    },
+    "chatkitDomainKey": {
+      "value": "${CHATKIT_DOMAIN_KEY}"
     }
   }
 }
