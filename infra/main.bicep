@@ -44,7 +44,7 @@ module containerApps 'br/public:avm/ptn/azd/container-apps-stack:0.3.0' = {
   scope: rg
   params: {
     containerAppsEnvironmentName: 'ame-${resourceToken}'
-    containerRegistryName: 'acr-${resourceToken}'
+    containerRegistryName: 'acr${resourceToken}'
     logAnalyticsWorkspaceName: monitoring.outputs.logAnalyticsWorkspaceName
     appInsightsConnectionString: monitoring.outputs.applicationInsightsConnectionString
     acrSku: 'Basic'
