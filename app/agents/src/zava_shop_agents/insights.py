@@ -17,11 +17,9 @@ from agent_framework import (
     handler,
     HostedWebSearchTool,
 )
-from agent_framework.azure import AzureOpenAIChatClient
 from agent_framework_azure_ai import AzureAIAgentClient
 from azure.identity.aio import DefaultAzureCredential
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
-
 
 logger = logging.getLogger(__name__)
 
@@ -67,15 +65,6 @@ class InsightsSynthesizedEvent(WorkflowEvent):
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_API_TIMEOUT = 10.0
 DEFAULT_AZURE_API_VERSION = "2024-02-15-preview"
-
-chat_client = AzureOpenAIChatClient(
-    api_key=os.environ.get("AZURE_OPENAI_API_KEY_GPT5"),
-    endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT_GPT5"),
-    deployment_name=os.environ.get("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"),
-    api_version=os.environ.get(
-        "AZURE_OPENAI_ENDPOINT_VERSION_GPT5", DEFAULT_AZURE_API_VERSION
-    ),
-)
 
 azure_ai_client = AzureAIAgentClient(
     async_credential=DefaultAzureCredential(
@@ -489,7 +478,7 @@ class WeatherAnalyzer(Executor):
 
     def __init__(self, id: str | None = None):
         super().__init__(id=id or "weather_analyzer")
-        self._weather_agent = chat_client.create_agent(
+        self._weather_agent = azure_ai_client.create_agent(
             instructions=(
                 "You analyze the next 7 days of weather to guide apparel stocking. "
                 "Respond in a single sentence using this structure: "
@@ -740,7 +729,7 @@ class TopSellingProductsAnalyzer(Executor):
 
     def __init__(self, id: str | None = None):
         # Create an agent with Finance MCP tools
-        self.agent = chat_client.create_agent(
+        self.agent = azure_ai_client.create_agent(
             name="Top Selling Products Analyzer",
             instructions=(
                 "You are a retail analyst analyzing product performance. "

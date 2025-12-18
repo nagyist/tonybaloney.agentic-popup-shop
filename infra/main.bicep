@@ -134,10 +134,10 @@ module aiFoundry 'br/public:avm/ptn/ai-ml/ai-foundry:0.6.0' = {
       {
         model: {
           format: 'OpenAI'
-          name: 'gpt-5-mini'
-          version: '2024-11-20'
+          name: 'gpt-4.1-mini'
+          version: '2025-04-14'
         }
-        name: 'gpt-5-mini'
+        name: 'gpt-4.1-mini'
         sku: {
           capacity: 1
           name: 'Standard'
@@ -190,6 +190,10 @@ module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
       {
         name: 'AZURE_AI_PROJECT_ENDPOINT'
         value: 'https://${aiFoundry.outputs.aiProjectName}.services.ai.azure.com/api/projects/${aiFoundry.outputs.aiProjectName}'
+      }
+      {
+        name: 'AZURE_AI_MODEL_DEPLOYMENT_NAME'
+        value: 'gpt-4.1-mini'
       }
     ]
   }

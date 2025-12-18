@@ -20,10 +20,22 @@ import os
 from agent_framework.azure import AzureOpenAIChatClient
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
 
-chat_client = AzureOpenAIChatClient(api_key=os.environ.get("AZURE_OPENAI_API_KEY_GPT5"),
-                                    endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT_GPT5"),
-                                    deployment_name=os.environ.get("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"),
-                                    api_version=os.environ.get("AZURE_OPENAI_ENDPOINT_VERSION_GPT5", "2024-02-15-preview"))
+from agent_framework_azure_ai import AzureAIAgentClient
+from azure.identity.aio import DefaultAzureCredential
+
+from pydantic import BaseModel
+from zava_shop_agents import MCPStreamableHTTPToolOTEL
+
+chat_client = AzureAIAgentClient(
+    async_credential=DefaultAzureCredential(
+        exclude_shared_token_cache_credential=True,
+        exclude_visual_studio_code_credential=True,
+    ),
+    project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
+    model_deployment_name=os.environ.get(
+        "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
+    ),
+)
 
 supplier_mcp_tools = MCPStreamableHTTPToolOTEL(
     name="SupplierMCP",

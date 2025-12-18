@@ -10,13 +10,22 @@ from agent_framework import (
     WorkflowContext,
     handler,
 )
-from agent_framework.azure import AzureOpenAIChatClient
+from agent_framework_azure_ai import AzureAIAgentClient
+from azure.identity.aio import DefaultAzureCredential
+
 from pydantic import BaseModel
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
-chat_client = AzureOpenAIChatClient(api_key=os.environ.get("AZURE_OPENAI_API_KEY_GPT5"),
-                                    endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT_GPT5"),
-                                    deployment_name=os.environ.get("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"),
-                                    api_version=os.environ.get("AZURE_OPENAI_ENDPOINT_VERSION_GPT5", "2024-02-15-preview"))
+
+chat_client = AzureAIAgentClient(
+    async_credential=DefaultAzureCredential(
+        exclude_shared_token_cache_credential=True,
+        exclude_visual_studio_code_credential=True,
+    ),
+    project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
+    model_deployment_name=os.environ.get(
+        "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
+    ),
+)
 
 
 class StockItem(BaseModel):
@@ -67,7 +76,7 @@ class StockExtractor(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, openai_client: AzureOpenAIChatClient, id: str = "Stock Agent"):
+    def __init__(self, openai_client: AzureAIAgentClient, id: str = "Stock Agent"):
         self.openai_client = openai_client
         # Create agent once with tools
         self.agent = openai_client.create_agent(
@@ -93,7 +102,7 @@ class ContextExecutor(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, responses_client: AzureOpenAIChatClient, id: str = "Prioritization Agent"):
+    def __init__(self, responses_client: AzureAIAgentClient, id: str = "Prioritization Agent"):
         # Create a domain specific agent using your configured AzureOpenAIChatClient.
         self.agent = responses_client.create_agent(
             name= id,
@@ -123,7 +132,7 @@ class Summarizer(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, chat_client: AzureOpenAIChatClient, id: str = "Summarizer Agent"):
+    def __init__(self, chat_client: AzureAIAgentClient, id: str = "Summarizer Agent"):
         # Create a domain specific agent that summarizes content.
         self.agent = chat_client.create_agent(
             name= id,
