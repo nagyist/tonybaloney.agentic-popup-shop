@@ -19,6 +19,8 @@ dependencies = [
     "agent-framework-azure-ai==1.0.0b251112",
     "aiohttp",
 
+    "azure-monitor-opentelemetry",
+    "azure-monitor-opentelemetry-exporter",
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-sqlalchemy",
     "opentelemetry-exporter-otlp",

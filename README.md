@@ -51,8 +51,13 @@ azd up
 
 ### Adding ChatKit Domain Key
 
-This is required for the user chat agent
+This is required for the user chat agent.To generate a key you need a developer account with [OpenAI](https://platform.openai.com/signup).
+
+Then you need to register a key and the domain, at [Configure Domain Allow List](https://platform.openai.com/settings/organization/security/domain-allowlist).
+
+Once you have done this, provision again with the key:
 
 ```
 azd env set CHATKIT_DOMAIN_KEY=
+azd up
 ```
