@@ -34,7 +34,6 @@ import json
 from datetime import datetime, timezone
 
 from zava_shop_api.chatkit_router import router as chatkit_router
-from zava_shop_api.routers.marketing import router as marketing_router, ws_router as marketing_ws_router
 
 from zava_shop_shared.config import Config
 from zava_shop_agents.stock import workflow as stock_workflow
@@ -220,8 +219,6 @@ app.add_middleware(
 )
 
 app.include_router(chatkit_router)
-app.include_router(marketing_router)
-app.include_router(marketing_ws_router)
 
 # Health check endpoint
 @app.get("/health")

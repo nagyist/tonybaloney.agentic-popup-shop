@@ -125,6 +125,37 @@ module supplierMcp 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
   }
 }
 
+module aiFoundry 'br/public:avm/ptn/ai-ml/ai-foundry:0.6.0' = {
+  scope: rg
+  name: 'ai-foundry'
+  params: {
+    baseName: substring(resourceToken, 0, 12)
+    aiModelDeployments: [
+      {
+        model: {
+          format: 'OpenAI'
+          name: 'gpt-5-mini'
+          version: '2024-11-20'
+        }
+        name: 'gpt-5-mini'
+        sku: {
+          capacity: 1
+          name: 'Standard'
+        }
+      }
+    ]
+  }
+}
+
+module apiIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.4.3' = {
+  name: 'apiidentity'
+  scope: rg
+  params: {
+    name: 'idapi-${resourceToken}'
+    location: location
+  }
+}
+
 module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
   name: 'api-container-app'
   scope: rg
@@ -138,10 +169,11 @@ module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
     identityType: 'UserAssigned'
     exists: apiAppExists
     containerName: 'main'
-    identityName: webIdentity.name
-    userAssignedIdentityResourceId: webIdentity.outputs.resourceId
+    identityName: apiIdentity.name
+    userAssignedIdentityResourceId: apiIdentity.outputs.resourceId
     containerMinReplicas: 1
-    identityPrincipalId: webIdentity.outputs.principalId
+    identityPrincipalId: apiIdentity.outputs.principalId
+    targetPort: 8000
     env:[
       {
         name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
@@ -154,6 +186,10 @@ module api 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
       {
         name: 'SUPPLIER_MCP_HTTP'
         value: supplierMcp.outputs.uri
+      }
+      {
+        name: 'AZURE_AI_PROJECT_ENDPOINT'
+        value: 'https://${aiFoundry.outputs.aiProjectName}.services.ai.azure.com/api/projects/${aiFoundry.outputs.aiProjectName}'
       }
     ]
   }
@@ -187,7 +223,7 @@ module web 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
       }
       {
         name: 'API_HOST'
-        value: api.outputs.uri
+        value: replace(api.outputs.uri, 'https://', '')
       }
     ]
   }
