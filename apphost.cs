@@ -1,6 +1,6 @@
-﻿#:sdk Aspire.AppHost.Sdk@13.0.2
-#:package Aspire.Hosting.JavaScript@13.0.2
-#:package Aspire.Hosting.Python@13.0.2
+﻿#:sdk Aspire.AppHost.Sdk@13.1.0
+#:package Aspire.Hosting.JavaScript@13.1.0
+#:package Aspire.Hosting.Python@13.1.0
 #:package dotenv.net@4.0.0
 
 using dotenv.net;
@@ -11,6 +11,14 @@ var builder = DistributedApplication.CreateBuilder(args);
 #pragma warning disable ASPIREHOSTINGPYTHON001
 
 envVars.TryGetValue("APPLICATIONINSIGHTS_CONNECTION_STRING", out string? appInsightsConnectionString);
+
+var authServer = builder.AddDockerfile("keycloak", "./auth/")
+    .WithHttpEndpoint(env: "PORT", targetPort: 8080)
+    .WithHttpHealthCheck("/realms/mcp")
+    .WithEnvironment("KEYCLOAK_ADMIN", "admin")
+    .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", "admin")
+    .WithTracing(appInsightsConnectionString)
+    .WithExternalHttpEndpoints();
 
 var financeMcp = builder.AddPythonModule("finance-mcp", "./app/mcp/", "zava_shop_mcp.finance_server")
     .WithUv()
@@ -47,8 +55,6 @@ var agentDev = builder.AddPythonModule("agent-dev", "./app/agents/", "zava_shop_
     .WithEnvironment("SUPPLIER_MCP_HTTP", supplierMcp.GetEndpoint("http"))
     // Agent SDK
     .WithEnvironment("AZURE_AI_PROJECT_ENDPOINT", envVars["AZURE_AI_PROJECT_ENDPOINT"])
-    .WithEnvironment("AZURE_AI_PROJECT_API_KEY", envVars["AZURE_AI_PROJECT_API_KEY"])
-    .WithEnvironment("AZURE_AI_PROJECT_AGENT_VERSION", envVars["AZURE_AI_PROJECT_AGENT_VERSION"])
     .WithEnvironment("AZURE_AI_PROJECT_AGENT_ID", envVars["AZURE_AI_PROJECT_AGENT_ID"])
     .WithEnvironment("AZURE_AI_MODEL_DEPLOYMENT_NAME", envVars["AZURE_AI_MODEL_DEPLOYMENT_NAME"])
     // Insights search
@@ -72,15 +78,8 @@ var apiService = builder.AddPythonModule("api", "./app/api/", "uvicorn")
     .WithEnvironment("OTEL_PYTHON_EXCLUDED_URLS", "/health")
     .WithEnvironment("FINANCE_MCP_HTTP", financeMcp.GetEndpoint("http"))
     .WithEnvironment("SUPPLIER_MCP_HTTP", supplierMcp.GetEndpoint("http"))
-    // OpenAI settings
-    .WithEnvironment("AZURE_OPENAI_ENDPOINT_GPT5", envVars["AZURE_OPENAI_ENDPOINT_GPT5"])
-    .WithEnvironment("AZURE_OPENAI_API_KEY_GPT5", envVars["AZURE_OPENAI_API_KEY_GPT5"])
-    .WithEnvironment("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5", envVars["AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"])
-    .WithEnvironment("AZURE_OPENAI_ENDPOINT_VERSION_GPT5", envVars["AZURE_OPENAI_ENDPOINT_VERSION_GPT5"])
     // Agent SDK
     .WithEnvironment("AZURE_AI_PROJECT_ENDPOINT", envVars["AZURE_AI_PROJECT_ENDPOINT"])
-    .WithEnvironment("AZURE_AI_PROJECT_API_KEY", envVars["AZURE_AI_PROJECT_API_KEY"])
-    .WithEnvironment("AZURE_AI_PROJECT_AGENT_VERSION", envVars["AZURE_AI_PROJECT_AGENT_VERSION"])
     .WithEnvironment("AZURE_AI_PROJECT_AGENT_ID", envVars["AZURE_AI_PROJECT_AGENT_ID"])
     // Insights search
     .WithEnvironment("OPENWEATHER_API_KEY", envVars["OPENWEATHER_API_KEY"])
@@ -88,10 +87,6 @@ var apiService = builder.AddPythonModule("api", "./app/api/", "uvicorn")
     .WithEnvironment("BING_CUSTOM_INSTANCE_NAME", envVars["BING_CUSTOM_INSTANCE_NAME"])
     .WithEnvironment("BING_CUSTOM_CONNECTION_NAME", envVars["BING_CUSTOM_CONNECTION_NAME"])
     .WithEnvironment("BING_API_KEY", envVars["BING_API_KEY"])
-    // Image models
-    .WithEnvironment("IMAGE_ENDPOINT", envVars["IMAGE_ENDPOINT"])
-    .WithEnvironment("IMAGE_API_KEY", envVars["IMAGE_API_KEY"])
-    .WithEnvironment("IMAGE_MODEL", envVars["IMAGE_MODEL"])
     // Extra
     .WithTracing(appInsightsConnectionString)
     .WithEnvironment("DEV_GUEST_TOKEN", envVars["DEV_GUEST_TOKEN"])

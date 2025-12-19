@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -2712,6 +2712,8 @@ dependencies = [
     { name = "agent-framework-chatkit" },
     { name = "aiohttp" },
     { name = "aiosqlite" },
+    { name = "azure-monitor-opentelemetry" },
+    { name = "azure-monitor-opentelemetry-exporter" },
     { name = "fastapi" },
     { name = "fastapi-cache2" },
     { name = "openai-chatkit" },
@@ -2739,6 +2741,8 @@ requires-dist = [
     { name = "agent-framework-chatkit", specifier = "==1.0.0b251112" },
     { name = "aiohttp" },
     { name = "aiosqlite", specifier = ">=0.20.0,<0.21.0" },
+    { name = "azure-monitor-opentelemetry" },
+    { name = "azure-monitor-opentelemetry-exporter" },
     { name = "fastapi" },
     { name = "fastapi-cache2" },
     { name = "httpx", marker = "extra == 'dev'" },
