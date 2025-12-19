@@ -15,8 +15,8 @@ envVars.TryGetValue("APPLICATIONINSIGHTS_CONNECTION_STRING", out string? appInsi
 var authServer = builder.AddDockerfile("keycloak", "./auth/")
     .WithHttpEndpoint(env: "PORT", targetPort: 8080)
     .WithHttpHealthCheck("/realms/mcp")
-    .WithEnvironment("KEYCLOAK_ADMIN", "admin")
-    .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", "admin")
+    .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
+    .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin")
     .WithTracing(appInsightsConnectionString)
     .WithExternalHttpEndpoints();
 

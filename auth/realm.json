@@ -1,6 +1,8 @@
 {
   "realm": "mcp",
   "enabled": true,
+  "displayName": "Zava",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Zava</span></div>",
   "resetPasswordAllowed": true,
   "bruteForceProtected": true,
   "accessTokenLifespan": 300,
