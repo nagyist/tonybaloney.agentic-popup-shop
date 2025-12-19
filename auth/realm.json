@@ -1,5 +1,5 @@
 {
-  "realm": "mcp",
+  "realm": "zava",
   "enabled": true,
   "displayName": "Zava",
   "displayNameHtml": "<div class=\"kc-logo-text\"><span>Zava</span></div>",
@@ -14,7 +14,7 @@
   "accessCodeLifespanLogin": 1800,
   "defaultDefaultClientScopes": [
     "openid",
-    "mcp:access"
+    "zava:access"
   ],
   "clientScopes": [
     {
@@ -40,13 +40,13 @@
       ]
     },
     {
-      "name": "mcp:access",
-      "description": "MCP tools scope for accessing MCP server tools",
+      "name": "zava:access",
+      "description": "Zava tools scope for accessing Zava server tools",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
         "display.on.consent.screen": "true",
-        "consent.screen.text": "Access MCP tools"
+        "consent.screen.text": "Access Zava tools"
       },
       "protocolMappers": [
         {

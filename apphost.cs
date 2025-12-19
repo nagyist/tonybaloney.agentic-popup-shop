@@ -29,8 +29,9 @@ var financeMcp = builder.AddPythonModule("finance-mcp", "./app/mcp/", "zava_shop
     })
     .WithHttpHealthCheck("/health")
     .WithEnvironment("OTEL_PYTHON_EXCLUDED_URLS", "/health")
+    .WithEnvironment("KEYCLOAK_REALM_URL", $"{authServer.GetEndpoint("http")}/realms/zava")
+    .WithEnvironment("KEYCLOAK_MCP_SERVER_BASE_URL", authServer.GetEndpoint("http"))
     .WithTracing(appInsightsConnectionString)
-    .WithEnvironment("DEV_GUEST_TOKEN", envVars["DEV_GUEST_TOKEN"])
     .WithExternalHttpEndpoints();
 
 var supplierMcp = builder.AddPythonModule("supplier-mcp", "./app/mcp/", "zava_shop_mcp.supplier_server")
@@ -42,8 +43,9 @@ var supplierMcp = builder.AddPythonModule("supplier-mcp", "./app/mcp/", "zava_sh
     })
     .WithHttpHealthCheck("/health")
     .WithEnvironment("OTEL_PYTHON_EXCLUDED_URLS", "/health")
+    .WithEnvironment("KEYCLOAK_REALM_URL", $"{authServer.GetEndpoint("http")}/realms/zava")
+    .WithEnvironment("KEYCLOAK_MCP_SERVER_BASE_URL", authServer.GetEndpoint("http"))
     .WithTracing(appInsightsConnectionString)
-    .WithEnvironment("DEV_GUEST_TOKEN", envVars["DEV_GUEST_TOKEN"])
     .WithExternalHttpEndpoints();
 
 var agentDev = builder.AddPythonModule("agent-dev", "./app/agents/", "zava_shop_agents")
@@ -65,7 +67,6 @@ var agentDev = builder.AddPythonModule("agent-dev", "./app/agents/", "zava_shop_
     .WithEnvironment("BING_API_KEY", envVars["BING_API_KEY"])
 
     .WithTracing(appInsightsConnectionString)
-    .WithEnvironment("DEV_GUEST_TOKEN", envVars["DEV_GUEST_TOKEN"])
     .WithExternalHttpEndpoints();
 
 
@@ -89,7 +90,6 @@ var apiService = builder.AddPythonModule("api", "./app/api/", "uvicorn")
     .WithEnvironment("BING_API_KEY", envVars["BING_API_KEY"])
     // Extra
     .WithTracing(appInsightsConnectionString)
-    .WithEnvironment("DEV_GUEST_TOKEN", envVars["DEV_GUEST_TOKEN"])
     // TODO: Review this setting
     .WithEnvironment("ENABLE_VSCODE_TRACING", "true")
     .WithExternalHttpEndpoints();

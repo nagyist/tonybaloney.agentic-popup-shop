@@ -7,6 +7,7 @@ finance agents with order policies, contracts, sales analysis, and inventory.
 
 The server uses pre-written SQL queries (not dynamically generated SQL) with SQLite ORM.
 """
+from zava_shop_mcp.keycloak_provider import KeycloakAuthProvider
 from opentelemetry.instrumentation.auto_instrumentation import initialize
 initialize()
 from datetime import datetime, timedelta
@@ -50,17 +51,7 @@ from zava_shop_mcp.models import (
     StorePerformanceResult,
 )
 
-GUEST_TOKEN = os.getenv("DEV_GUEST_TOKEN", "dev-guest-token")
 
-verifier = StaticTokenVerifier(
-    tokens={
-        GUEST_TOKEN: {
-            "client_id": "guest-user",
-            "scopes": ["read:data"]
-        }
-    },
-    required_scopes=["read:data"]
-)
 
 # Configure logging
 logging.basicConfig(
@@ -79,10 +70,19 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator:
     yield
     db.close_engine()
 
+KEYCLOAK_REALM_URL = os.environ["KEYCLOAK_REALM_URL"]
+keycloak_base_url = os.environ["KEYCLOAK_MCP_SERVER_BASE_URL"]
+keycloak_audience = os.getenv("KEYCLOAK_MCP_SERVER_AUDIENCE") or "mcp-server"
 
+auth = KeycloakAuthProvider(
+    realm_url=KEYCLOAK_REALM_URL,
+    base_url=keycloak_base_url,
+    required_scopes=["openid", "zava:access"],
+    audience=keycloak_audience,
+)
 
 # Initialize FastMCP server
-mcp = FastMCP("Zava Finance Agent MCP Server", auth=verifier, lifespan=app_lifespan)
+mcp = FastMCP("Zava Finance Agent MCP Server", auth=auth, lifespan=app_lifespan)
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -731,6 +731,7 @@ async def get_store_performance_comparison(
 
 if __name__ == "__main__":
     logger.info("🚀 Starting Supplier Agent MCP Server")
+
     # Configure server settings
     port = int(os.getenv("PORT", 8002))
     host = os.getenv("HOST", "0.0.0.0")  # noqa: S104
@@ -739,5 +740,4 @@ if __name__ == "__main__":
         host,
         port,
     )
-    logger.info("Guest token is '%s******%s'", GUEST_TOKEN[0:1], GUEST_TOKEN[-2:])
     mcp.run(transport="http", host=host, port=port, path="/mcp", stateless_http=True)

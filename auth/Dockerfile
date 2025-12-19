@@ -2,11 +2,12 @@
 # Based on: https://www.keycloak.org/server/containers
 FROM quay.io/keycloak/keycloak:26.4 AS builder
 
-# Copy the MCP realm configuration for import
-COPY realm.json /opt/keycloak/data/import/mcp-realm.json
+# Copy the realm configuration for import
+COPY realm.json /opt/keycloak/data/import/zava-realm.json
+COPY zava-theme /opt/keycloak/themes
 
 # Build Keycloak to pre-compile themes (fixes cache hash mismatch across replicas)
-RUN /opt/keycloak/bin/kc.sh build
+RUN /opt/keycloak/bin/kc.sh build --health-enabled=true
 
 # Production image with pre-built themes
 FROM quay.io/keycloak/keycloak:26.4
@@ -24,5 +25,4 @@ ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
 # --hostname-strict=false allows dynamic hostname resolution from proxy headers
 # --http-relative-path=/auth sets the base path so Keycloak serves all content under /auth/*
 # --import-realm imports the MCP realm on startup
-# --import-strategy=overwrite-existing ensures realm.json changes are applied even if the realm exists
-CMD ["start-dev", "--features=quick-theme", "--http-port=8080", "--proxy-headers=xforwarded", "--hostname-strict=false", "--http-relative-path=/auth", "--import-realm"]
+CMD ["start-dev", "--features=quick-theme", "--http-port=8080", "--proxy-headers=xforwarded", "--hostname-strict=false", "--http-relative-path=/auth", "--import-realm", "--health-enabled=true", "--tracing-enabled=true", "--features=opentelemetry"]

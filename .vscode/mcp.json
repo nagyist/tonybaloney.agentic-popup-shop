@@ -3,12 +3,10 @@
 		"zava-supplier-agent": {
 			"url": "http://localhost:28002/mcp",
 			"type": "http",
-			"headers": {"Authorization": "Bearer dev-guest-token"}
 		},
 		"zava-finance-agent": {
 			"url": "http://localhost:28001/mcp",
 			"type": "http",
-			"headers": {"Authorization": "Bearer dev-guest-token"}
 		},
 
 	},
