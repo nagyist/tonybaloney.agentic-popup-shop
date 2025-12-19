@@ -79,19 +79,40 @@
       "webOrigins": [
         "+"
       ]
+    },
+    {
+      "clientId": "zava-api",
+      "name": "Zava API Client",
+      "enabled": true,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "h7k8m9n0o1p2q3r4s5t6u7v8w9x0y1z2",
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
     }
   ],
   "users": [
     {
-      "username": "testuser",
+      "username": "stacey",
       "enabled": true,
-      "email": "testuser@example.com",
-      "firstName": "Test",
-      "lastName": "User",
+      "email": "stacey@example.com",
+      "firstName": "Stacey",
+      "lastName": "Lopez",
       "credentials": [
         {
           "type": "password",
-          "value": "testpass",
+          "value": "stacey123",
           "temporary": false
         }
       ]

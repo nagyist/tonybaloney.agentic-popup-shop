@@ -5,10 +5,6 @@ Provides REST API endpoints for the frontend application.
 """
 import os
 
-if os.environ.get("ENABLE_VSCODE_TRACING", "false").lower() == "true":
-    from agent_framework.observability import setup_observability
-    setup_observability(vs_code_extension_port=4319)
-
 from opentelemetry.instrumentation.auto_instrumentation import initialize
 initialize()
 
@@ -65,15 +61,15 @@ from .models import (
     OrderListResponse, CustomerProfile,
 )
 from zava_shop_agents.insights_cache import get_cache
-from .customers import get_customer_orders
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from .customers import get_customer_orders\
 
-from zava_shop_api.auth import (
-    authenticate_user,
+from .openid_auth import (
+    AuthService,
     get_current_user,
     get_current_user_from_token,
     logout_user,
 )
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
 # Configure logging
 logging.basicConfig(
@@ -156,15 +152,6 @@ async def lifespan(app: FastAPI):
     backend = InMemoryBackend()
     FastAPICache.init(backend=backend)
 
-    # Initialize token store
-    try:
-        from zava_shop_api.auth import token_store
-        await token_store.initialize()
-        logger.info("Token store initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize token store: {e}")
-        raise
-
     yield
 
     # Shutdown
@@ -238,10 +225,7 @@ async def login(credentials: LoginRequest) -> LoginResponse:
     - admin: Can see all stores
     - store_manager: Can only see their assigned store
     """
-    token, user = await authenticate_user(
-        credentials.username,
-        credentials.password
-    )
+    token, user = AuthService.authenticate_user(credentials.username, credentials.password)
 
     # Get store name if store manager
     store_name = None

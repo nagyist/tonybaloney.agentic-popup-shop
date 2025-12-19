@@ -29,6 +29,8 @@ dependencies = [
     # local editable packages
     "zava-shop-shared",
     "zava-shop-agents",
+
+    "python-keycloak>=5.8.1,<6.0.0",
 ]
 
 [tool.uv.sources]

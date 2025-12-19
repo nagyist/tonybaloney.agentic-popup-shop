@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from zava_shop_api.memory_store import MemoryStore
 from zava_shop_api.models import OrderResponse, TokenData
-from zava_shop_api.auth import get_current_user
+from zava_shop_api.openid_auth import get_current_user
 from chatkit.server import ChatKitServer, StreamingResult
 from chatkit.types import (
     ThreadMetadata,

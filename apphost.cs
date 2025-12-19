@@ -10,14 +10,16 @@ var envVars = DotEnv.Read();
 var builder = DistributedApplication.CreateBuilder(args);
 #pragma warning disable ASPIREHOSTINGPYTHON001
 
+var adminPassword = builder.AddParameter("kcAdminPassword", secret: true);
+
 envVars.TryGetValue("APPLICATIONINSIGHTS_CONNECTION_STRING", out string? appInsightsConnectionString);
 
 var authServer = builder.AddDockerfile("keycloak", "./auth/")
     .WithHttpEndpoint(env: "PORT", targetPort: 8080)
-    .WithHttpHealthCheck("/realms/mcp")
+    .WithHttpHealthCheck("/health")
     .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
-    .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin")
-    .WithTracing(appInsightsConnectionString)
+    .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", adminPassword)
+    .WithOtlpExporter()
     .WithExternalHttpEndpoints();
 
 var financeMcp = builder.AddPythonModule("finance-mcp", "./app/mcp/", "zava_shop_mcp.finance_server")
@@ -79,6 +81,11 @@ var apiService = builder.AddPythonModule("api", "./app/api/", "uvicorn")
     .WithEnvironment("OTEL_PYTHON_EXCLUDED_URLS", "/health")
     .WithEnvironment("FINANCE_MCP_HTTP", financeMcp.GetEndpoint("http"))
     .WithEnvironment("SUPPLIER_MCP_HTTP", supplierMcp.GetEndpoint("http"))
+    // Auth
+    .WithEnvironment("KEYCLOAK_SERVER_URL", $"{authServer.GetEndpoint("http")}/auth")
+    .WithEnvironment("KEYCLOAK_REALM", "zava")
+    .WithEnvironment("KEYCLOAK_CLIENT_ID", "zava-api")
+    .WithEnvironment("KEYCLOAK_CLIENT_SECRET", envVars["ZAVA_API_CLIENT_SECRET"])
     // Agent SDK
     .WithEnvironment("AZURE_AI_PROJECT_ENDPOINT", envVars["AZURE_AI_PROJECT_ENDPOINT"])
     .WithEnvironment("AZURE_AI_PROJECT_AGENT_ID", envVars["AZURE_AI_PROJECT_AGENT_ID"])
@@ -89,9 +96,7 @@ var apiService = builder.AddPythonModule("api", "./app/api/", "uvicorn")
     .WithEnvironment("BING_CUSTOM_CONNECTION_NAME", envVars["BING_CUSTOM_CONNECTION_NAME"])
     .WithEnvironment("BING_API_KEY", envVars["BING_API_KEY"])
     // Extra
-    .WithTracing(appInsightsConnectionString)
-    // TODO: Review this setting
-    .WithEnvironment("ENABLE_VSCODE_TRACING", "true")
+    .WithTracing(appInsightsConnectionString)    // TODO: Review this setting
     .WithExternalHttpEndpoints();
 
 builder.AddViteApp("frontend", "./frontend")
