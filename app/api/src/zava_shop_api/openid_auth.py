@@ -1,3 +1,4 @@
+from httpcore import stream
 import logging
 from fastapi import Header, HTTPException, status
 from keycloak import KeycloakOpenID
@@ -5,7 +6,7 @@ from keycloak.exceptions import KeycloakAuthenticationError
 from zava_shop_api.models import TokenData
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 class Settings(BaseSettings):
     keycloak_server_url: str = Field(..., env="KEYCLOAK_SERVER_URL")
@@ -29,6 +30,62 @@ keycloak_openid = KeycloakOpenID(
     client_secret_key=settings.keycloak_client_secret,
 )
 
+class UserAuthModel(BaseModel):
+    role: str
+    store_id: int | None
+    customer_id: int | None = None
+
+
+# TODO : Use lookups in database
+USERS: dict[str, UserAuthModel] = {
+    "admin": UserAuthModel(
+        role="admin",
+        store_id=None
+    ),
+    "manager1": UserAuthModel(
+        role="store_manager",
+        store_id=1  # NYC Times Square
+    ),
+    "manager2": UserAuthModel(
+        role="store_manager",
+        store_id=2  # SF Union Square
+    ),
+    "stacey": UserAuthModel(
+        role="customer",
+        store_id=1,
+        customer_id=4
+    ),
+    "marketing": UserAuthModel(
+        role="marketing",
+        store_id=None
+    ),
+}
+
+class SessionData(BaseModel):
+    token: str
+    refresh_token: str
+    expires_at: int
+    role: str
+    store_id : int | None
+    customer_id : int | None
+    username: str
+
+    def as_token_data(self) -> TokenData:
+        return TokenData(
+            username=self.username,
+            user_role=self.role,
+            store_id=self.store_id,
+            customer_id=self.customer_id
+        )
+
+SESSIONS: dict[str, SessionData] = {}
+
+
+def get_session_data(token: str) -> SessionData | None:
+    # TODO: Inspect expiry
+    return SESSIONS.get(token, None)
+
+
 class AuthService:
     # TODO: Make this async
     @staticmethod
@@ -43,11 +100,25 @@ class AuthService:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid username or password",
                 )
+            user = USERS.get(username, None)
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found",
+                )
+            
             # Fetch user info to get roles or other details
-            logger.warning(f"token: {token}")
-            # TODO: Find a way of joining these.
-            user_info = keycloak_openid.userinfo(token["access_token"])
-            return token["access_token"], TokenData(username=username, user_role=user_info.get("role", "customer"))
+            session_data = SessionData(
+                token=token["access_token"],
+                refresh_token=token["refresh_token"],
+                expires_at=token["expires_in"] + token["not-before-policy"],
+                customer_id=user.customer_id,
+                role=user.role,
+                store_id=user.store_id,
+                username=username
+            )
+            SESSIONS[token["access_token"]] = session_data
+            return token["access_token"], session_data.as_token_data()
         except KeycloakAuthenticationError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -61,15 +132,12 @@ class AuthService:
         Verify the given token and return user information.
         """
         try:
-            user_info = keycloak_openid.userinfo(token)
+            user_info = get_session_data(token)
             if not user_info:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
                 )
-            return TokenData(
-                username=user_info["username"],
-                user_role=user_info.get("role", "customer"),
-            )
+            return user_info.as_token_data()
         except KeycloakAuthenticationError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -117,5 +185,5 @@ async def get_current_user_from_token(token: str) -> TokenData:
     return token_data
 
 async def logout_user(token: str) -> None:
-    # TODO
-    pass
+    # TODO: call open id connect logout endpoint
+    del SESSIONS[token]
