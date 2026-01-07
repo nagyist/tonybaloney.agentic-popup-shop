@@ -348,3 +348,4 @@ FodyWeavers.xsd
 resources.txt
 *.egg-info/
 verify_query.py
+.idea/

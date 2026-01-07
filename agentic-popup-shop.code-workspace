@@ -1,0 +1,19 @@
+{
+    "folders": [
+        {
+            "path": "app/agents"
+        },
+        {
+            "path": "app/api"
+        },
+        {
+            "path": "app/data"
+        },
+        {
+            "path": "app/mcp"
+        },
+        {
+            "path": "app/shared"
+        }
+    ]
+}

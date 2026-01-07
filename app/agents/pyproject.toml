@@ -27,4 +27,8 @@ build-backend = "uv_build"
 dev = [
     "pytest",
     "pytest-asyncio",
+    "agent-framework-ollama==1.0.0b251223",
 ]
+
+[tool.ruff]
+line-length = 120

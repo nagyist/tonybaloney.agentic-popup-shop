@@ -41,38 +41,32 @@ class RestockResult(BaseModel):
     summary: str
 
 
-finance_mcp = MCPStreamableHTTPToolOTEL(
-    name="FinanceMCP",
-    url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
-    headers={
-         "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN','dev-guest-token')}"
-    },
-    load_tools=True,
-    load_prompts=False,
-    request_timeout=30,
-)
-
 
 class StockExtractor(Executor):
     """Custom executor that extracts stock information from messages."""
 
     agent: ChatAgent
 
-    def __init__(self, client: AzureAIClient, id: str = "Stock Agent"):
+    def __init__(self, client: AzureAIClient, finance_mcp: MCPStreamableHTTPTool, _id: str = "Stock Agent"):
         self.agent = client.create_agent(
-            name=id,
+            name=_id,
             instructions=(
-                "You determine strategies for restocking items. Consult the tools for stock levels and prioritise which items to restock first."
+                "You determine strategies for restocking items. "
+                "Consult the tools for stock levels and prioritise which items to restock first."
             ),
             tools=finance_mcp,
         )
-        super().__init__(id=id)
+        super().__init__(id=_id)
 
     @handler
     async def handle(self, message: ChatMessage, ctx: WorkflowContext[StockExtractorResult]) -> None:
         """Extract department data"""
         response = await self.agent.run(message, response_format=StockItemCollection)
-        result = StockExtractorResult(context=message.text, messages=[message.text for message in response.messages if message.text.strip()], collection=response.value)
+        result = StockExtractorResult(
+            context=message.text,
+            messages=[message.text for message in response.messages if message.text.strip()],
+            collection=response.value
+        )
         await ctx.send_message(result)
 
 
@@ -81,16 +75,16 @@ class ContextExecutor(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, client: AzureAIClient, id: str = "Prioritization Agent"):
+    def __init__(self, client: AzureAIClient, _id: str = "Prioritization Agent"):
         # Create a domain specific agent using your configured AzureOpenAIChatClient.
         self.agent = client.create_agent(
-            name= id,
+            name= _id,
             instructions=(
                 "You look at the context to prioritize restocking items."
             ),
         )
         # Associate the agent with this executor node. The base Executor stores it on self.agent.
-        super().__init__(id=id)
+        super().__init__(id=_id)
 
     @handler
     async def handle(self, stock_result: StockExtractorResult, ctx: WorkflowContext[StockExtractorResult]) -> None:
@@ -111,17 +105,17 @@ class Summarizer(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, client: AzureAIClient, id: str = "Summarizer Agent"):
+    def __init__(self, client: AzureAIClient, _id: str = "Summarizer Agent"):
         # Create a domain specific agent that summarizes content.
         self.agent = client.create_agent(
-            name= id,
+            name= _id,
             instructions=(
                 "You are an excellent workflow summarizer. You summarize the restocking task and what the user asked for into an overview. "
                 "Do not list the items one by one as the user will get these in the final output."
                 "Look at the specific user instructions and context to provide a tailored summary."
             ),
         )
-        super().__init__(id=id)
+        super().__init__(id=_id)
 
     @handler
     async def handle(self, stock_result: StockExtractorResult, ctx: WorkflowContext[list[ChatMessage], RestockResult]) -> None:
@@ -135,9 +129,9 @@ class Summarizer(Executor):
         await ctx.yield_output(RestockResult(items=stock_result.collection.items, summary=response.text))
 
 
-def build_workflow(chat_client: AzureAIClient | None = None) -> Workflow:
-    if chat_client is None:
-        chat_client = AzureAIClient(
+def build_workflow(client: AzureAIClient | None = None, mcp: MCPStreamableHTTPTool | None = None) -> Workflow:
+    if client is None:
+        client = AzureAIClient(
             async_credential=DefaultAzureCredential(
                 exclude_shared_token_cache_credential=True,
                 exclude_visual_studio_code_credential=True,
@@ -148,9 +142,20 @@ def build_workflow(chat_client: AzureAIClient | None = None) -> Workflow:
             ),
         )
 
-    stock = StockExtractor(chat_client)
-    context = ContextExecutor(chat_client)
-    summarizer = Summarizer(chat_client)
+    if mcp is None:
+        mcp = MCPStreamableHTTPToolOTEL(
+            name="FinanceMCP",
+            url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
+            headers={
+                "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"
+            },
+            load_prompts=False,
+            request_timeout=30,
+        )
+
+    stock = StockExtractor(client, mcp)
+    context = ContextExecutor(client)
+    summarizer = Summarizer(client)
 
     workflow = WorkflowBuilder(name="Restocking Workflow") \
             .set_start_executor(stock) \
