@@ -67,7 +67,7 @@ WEATHER_API_TIMEOUT = 10.0
 DEFAULT_AZURE_API_VERSION = "2024-02-15-preview"
 
 azure_ai_client = AzureAIClient(
-    async_credential=DefaultAzureCredential(
+    credential=DefaultAzureCredential(
         exclude_shared_token_cache_credential=True,
         exclude_visual_studio_code_credential=True,
     ),
@@ -417,7 +417,7 @@ class DataCollector(Executor):
             ValueError: If unable to extract required store information
         """
         import re
-        
+
         text = message.text.strip()
         store_id = None
         user_role = None

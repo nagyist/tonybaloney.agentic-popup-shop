@@ -1,11 +1,12 @@
 # Copyright (c) Microsoft. All rights reserved.
 import os
+from typing import Sequence
 
 from agent_framework import (
     ChatAgent,
     ChatMessage,
     Executor,
-    MCPStreamableHTTPTool,
+    ToolProtocol,
     WorkflowBuilder,
     WorkflowContext,
     Workflow,
@@ -40,21 +41,22 @@ class RestockResult(BaseModel):
     items: list[StockItem]
     summary: str
 
-
+DEFAULT_MODEL=os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini")
 
 class StockExtractor(Executor):
     """Custom executor that extracts stock information from messages."""
 
     agent: ChatAgent
 
-    def __init__(self, client: AzureAIClient, finance_mcp: MCPStreamableHTTPTool, _id: str = "Stock Agent"):
+    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+        _id = "stock-extractor-agent" + agent_suffix
         self.agent = client.create_agent(
             name=_id,
             instructions=(
                 "You determine strategies for restocking items. "
                 "Consult the tools for stock levels and prioritise which items to restock first."
             ),
-            tools=finance_mcp,
+            tools=tools,
         )
         super().__init__(id=_id)
 
@@ -75,13 +77,14 @@ class ContextExecutor(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, client: AzureAIClient, _id: str = "Prioritization Agent"):
-        # Create a domain specific agent using your configured AzureOpenAIChatClient.
+    def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
+        _id = "stock-context-agent" + agent_suffix
         self.agent = client.create_agent(
             name= _id,
             instructions=(
                 "You look at the context to prioritize restocking items."
             ),
+            model_id=DEFAULT_MODEL,
         )
         # Associate the agent with this executor node. The base Executor stores it on self.agent.
         super().__init__(id=_id)
@@ -105,15 +108,18 @@ class Summarizer(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, client: AzureAIClient, _id: str = "Summarizer Agent"):
+    def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
+        _id = "stock-summarizer-agent" + agent_suffix
         # Create a domain specific agent that summarizes content.
         self.agent = client.create_agent(
-            name= _id,
+            id=_id,
+            name=_id,
             instructions=(
                 "You are an excellent workflow summarizer. You summarize the restocking task and what the user asked for into an overview. "
                 "Do not list the items one by one as the user will get these in the final output."
                 "Look at the specific user instructions and context to provide a tailored summary."
             ),
+            store=True,
         )
         super().__init__(id=_id)
 
@@ -129,17 +135,17 @@ class Summarizer(Executor):
         await ctx.yield_output(RestockResult(items=stock_result.collection.items, summary=response.text))
 
 
-def build_workflow(client: AzureAIClient | None = None, mcp: MCPStreamableHTTPTool | None = None) -> Workflow:
+def build_workflow(client: AzureAIClient | None = None,
+                   mcp: ToolProtocol | Sequence[ToolProtocol] | None = None,
+                   agent_suffix: str = ""
+                   ) -> Workflow:
     if client is None:
         client = AzureAIClient(
-            async_credential=DefaultAzureCredential(
+            credential=DefaultAzureCredential(
                 exclude_shared_token_cache_credential=True,
                 exclude_visual_studio_code_credential=True,
             ),
             project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
-            model_deployment_name=os.environ.get(
-                "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
-            ),
         )
 
     if mcp is None:
@@ -153,9 +159,9 @@ def build_workflow(client: AzureAIClient | None = None, mcp: MCPStreamableHTTPTo
             request_timeout=30,
         )
 
-    stock = StockExtractor(client, mcp)
-    context = ContextExecutor(client)
-    summarizer = Summarizer(client)
+    stock = StockExtractor(client, mcp, agent_suffix=agent_suffix)
+    context = ContextExecutor(client, agent_suffix=agent_suffix)
+    summarizer = Summarizer(client, agent_suffix=agent_suffix)
 
     workflow = WorkflowBuilder(name="Restocking Workflow") \
             .set_start_executor(stock) \

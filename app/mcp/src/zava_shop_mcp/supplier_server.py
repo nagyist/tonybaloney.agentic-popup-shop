@@ -19,7 +19,7 @@ from fastmcp.server.auth import AccessToken
 from fastmcp import FastMCP
 from zava_shop_shared.supplier_sqlite import SupplierSQLiteProvider
 from pydantic import Field
-from typing import Annotated, AsyncIterator, Optional
+from typing import Annotated, AsyncIterator
 import os
 from datetime import datetime, timezone, timedelta
 import logging
@@ -37,7 +37,7 @@ from zava_shop_shared.models.sqlite import (
     Product,
     Category,
 )
-from zava_shop_mcp.models import (
+from zava_shop_shared.models.results import (
     CompanySupplierPolicyResult,
     FindSuppliersResult,
     SupplierContractResult,

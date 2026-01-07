@@ -41,7 +41,7 @@ from zava_shop_shared.models.sqlite import (
     ProductType,
     Inventory,
 )
-from zava_shop_mcp.models import (
+from zava_shop_shared.models.results import (
     CompanyPolicyResult,
     SupplierContractResult,
     SalesDataResult,

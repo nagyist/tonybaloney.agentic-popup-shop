@@ -27,5 +27,5 @@
             "packageManager": "ms-python.python:pip"
         }
     ],
-    "python.languageServer": "None"
+    //"python.languageServer": "None",
 }
