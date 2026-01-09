@@ -95,3 +95,39 @@ async def test_simple_path(azure_credential):
     for item in workflow_outputs[0].data.items:
         assert item in TEST_STOCK
     assert workflow_outputs[0].data.summary
+
+
+@pytest.mark.asyncio
+async def test_no_restock_needed_path(azure_credential):
+    """Demonstrate only having useless tools."""
+    called = False
+
+
+    @ai_function
+    def sing_a_song(lyrics: Annotated[str, Field(description="Lyrics to sing")]) -> str:
+        """
+        Sing a song with the given lyrics.
+        """
+        global called
+        called = True
+        return f"Singing: {lyrics}"
+
+    workflow = build_workflow(credential=azure_credential, mcp=[sing_a_song], agent_suffix="-test")  # pyright: ignore[reportArgumentType]
+
+    assert called
+
+    test_message = ChatMessage(role="user", text="Help me restock store 1")
+    result = await workflow.run(test_message)
+
+    executor_completions = [event for event in result if isinstance(event, ExecutorCompletedEvent)]
+    assert len(executor_completions) == 3  # Three executors should complete
+
+    # Get the workflow output
+    workflow_outputs = [event for event in result if isinstance(event, WorkflowOutputEvent)]
+    assert len(workflow_outputs) == 1
+
+    # There should not be any items to restock
+    assert workflow_outputs[0].data is not None
+    assert isinstance(workflow_outputs[0].data, RestockResult)
+    assert len(workflow_outputs[0].data.items) == 0
+

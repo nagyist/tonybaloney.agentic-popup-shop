@@ -67,6 +67,7 @@ class StockExtractor(Executor):
             ),
             model_id=DEFAULT_MODEL,
             tools=tools,
+            tool_choice='required',
             store=True,
         )
         super().__init__(id=_id)
