@@ -1,4 +1,3 @@
-from httpcore import stream
 import logging
 from fastapi import Header, HTTPException, status
 from keycloak import KeycloakOpenID
@@ -7,6 +6,7 @@ from zava_shop_api.models import TokenData
 
 from pydantic_settings import BaseSettings
 from pydantic import Field, BaseModel
+
 
 class Settings(BaseSettings):
     keycloak_server_url: str = Field(..., env="KEYCLOAK_SERVER_URL")
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ keycloak_openid = KeycloakOpenID(
     client_secret_key=settings.keycloak_client_secret,
 )
 
+
 class UserAuthModel(BaseModel):
     role: str
     store_id: int | None
@@ -38,36 +40,27 @@ class UserAuthModel(BaseModel):
 
 # TODO : Use lookups in database
 USERS: dict[str, UserAuthModel] = {
-    "admin": UserAuthModel(
-        role="admin",
-        store_id=None
-    ),
+    "admin": UserAuthModel(role="admin", store_id=None),
     "manager1": UserAuthModel(
         role="store_manager",
-        store_id=1  # NYC Times Square
+        store_id=1,  # NYC Times Square
     ),
     "manager2": UserAuthModel(
         role="store_manager",
-        store_id=2  # SF Union Square
+        store_id=2,  # SF Union Square
     ),
-    "stacey": UserAuthModel(
-        role="customer",
-        store_id=1,
-        customer_id=4
-    ),
-    "marketing": UserAuthModel(
-        role="marketing",
-        store_id=None
-    ),
+    "stacey": UserAuthModel(role="customer", store_id=1, customer_id=4),
+    "marketing": UserAuthModel(role="marketing", store_id=None),
 }
+
 
 class SessionData(BaseModel):
     token: str
     refresh_token: str
     expires_at: int
     role: str
-    store_id : int | None
-    customer_id : int | None
+    store_id: int | None
+    customer_id: int | None
     username: str
 
     def as_token_data(self) -> TokenData:
@@ -75,8 +68,9 @@ class SessionData(BaseModel):
             username=self.username,
             user_role=self.role,
             store_id=self.store_id,
-            customer_id=self.customer_id
+            customer_id=self.customer_id,
         )
+
 
 SESSIONS: dict[str, SessionData] = {}
 
@@ -106,7 +100,7 @@ class AuthService:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="User not found",
                 )
-            
+
             # Fetch user info to get roles or other details
             session_data = SessionData(
                 token=token["access_token"],
@@ -115,7 +109,7 @@ class AuthService:
                 customer_id=user.customer_id,
                 role=user.role,
                 store_id=user.store_id,
-                username=username
+                username=username,
             )
             SESSIONS[token["access_token"]] = session_data
             return token["access_token"], session_data.as_token_data()
@@ -143,6 +137,7 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
             )
+
 
 async def get_current_user(authorization: str = Header(...)) -> TokenData:
     """
@@ -183,6 +178,7 @@ async def get_current_user_from_token(token: str) -> TokenData:
         )
 
     return token_data
+
 
 async def logout_user(token: str) -> None:
     # TODO: call open id connect logout endpoint

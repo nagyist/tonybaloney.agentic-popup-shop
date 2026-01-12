@@ -1,6 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 import os
-from typing import Sequence
+from typing import Sequence, cast
 
 from agent_framework import (
     ChatAgent,
@@ -18,6 +18,9 @@ from azure.core.credentials_async import AsyncTokenCredential
 
 from pydantic import BaseModel, ConfigDict
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
+
+
+WORKFLOW_AGENT_DESCRIPTION = "Stock Management Workflow Agent"
 
 
 class StrictModel(BaseModel):
@@ -61,6 +64,7 @@ class StockExtractor(Executor):
         _id = "stock-extractor-agent" + agent_suffix
         self.agent = client.create_agent(
             name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You determine strategies for restocking items. "
                 "Consult the tools for stock levels and prioritise which items to restock first."
@@ -76,10 +80,11 @@ class StockExtractor(Executor):
     async def handle(self, message: ChatMessage, ctx: WorkflowContext[StockExtractorResult]) -> None:
         """Extract department data"""
         response = await self.agent.run(message, response_format=StockItemCollection)
+        value = cast(StockItemCollection, response.value)
         result = StockExtractorResult(
             context=message.text,
             messages=[message.text for message in response.messages if message.text.strip()],
-            collection=response.value,
+            collection=value,
         )
         await ctx.send_message(result)
 
@@ -93,6 +98,7 @@ class ContextExecutor(Executor):
         _id = "stock-context-agent" + agent_suffix
         self.agent = client.create_agent(
             name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=("You look at the context to prioritize restocking items."),
             model_id=DEFAULT_MODEL,
             store=True,
@@ -105,10 +111,11 @@ class ContextExecutor(Executor):
         m = "You look at the context to prioritize restocking items. Original Request:\n" + stock_result.context
         m += "\n\nCurrent Items:\n" + stock_result.collection.model_dump_json(indent=2)
         response = await self.agent.run(m, response_format=StockItemCollection)
+        value = cast(StockItemCollection, response.value)
         context_result = StockExtractorResult(
             context=stock_result.context,
             messages=[message.text for message in response.messages if message.text.strip()],
-            collection=response.value,
+            collection=value,
         )
         await ctx.send_message(context_result)
 
@@ -129,6 +136,7 @@ class Summarizer(Executor):
         self.agent = client.create_agent(
             id=_id,
             name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are an excellent workflow summarizer. You summarize the restocking task and what the user asked for into an overview. "
                 "Do not list the items one by one as the user will get these in the final output."

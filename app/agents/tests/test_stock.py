@@ -100,21 +100,16 @@ async def test_simple_path(azure_credential):
 @pytest.mark.asyncio
 async def test_no_restock_needed_path(azure_credential):
     """Demonstrate only having useless tools."""
-    called = False
-
 
     @ai_function
     def sing_a_song(lyrics: Annotated[str, Field(description="Lyrics to sing")]) -> str:
         """
         Sing a song with the given lyrics.
         """
-        global called
-        called = True
         return f"Singing: {lyrics}"
 
     workflow = build_workflow(credential=azure_credential, mcp=[sing_a_song], agent_suffix="-test")  # pyright: ignore[reportArgumentType]
 
-    assert called
 
     test_message = ChatMessage(role="user", text="Help me restock store 1")
     result = await workflow.run(test_message)

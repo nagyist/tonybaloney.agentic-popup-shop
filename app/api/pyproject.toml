@@ -49,3 +49,7 @@ dev = [
 ]
 
 # uv run uvicorn zava_shop_api.app:app --reload
+
+
+[tool.ruff]
+line-length = 120

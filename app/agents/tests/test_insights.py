@@ -1,8 +1,8 @@
-from zava_shop_agents.supplier_review import build_workflow
+from zava_shop_agents.insights import build_workflow, DataCollectionParameters
 
 import pytest
 from azure.identity.aio import DefaultAzureCredential
-from agent_framework import ChatMessage, ExecutorCompletedEvent
+from agent_framework import ExecutorCompletedEvent
 
 
 @pytest.fixture
@@ -13,13 +13,9 @@ def azure_credential():
 
 @pytest.mark.asyncio
 async def test_simple_path(azure_credential):
-
-    with open("tests/data/test_proposal.md", "r", encoding="utf-8") as f:
-        review_text = f.read()
-
     workflow = build_workflow(credential=azure_credential, tools=[], agent_suffix="-test")  # pyright: ignore[reportArgumentType]
-    test_message = ChatMessage(role="user", text=review_text)
-    result = await workflow.run(test_message)
+    params = DataCollectionParameters(store_id=1, user_role="store manager")
+    result = await workflow.run(params)
 
     executor_completions = [event for event in result if isinstance(event, ExecutorCompletedEvent)]
     assert len(executor_completions) >= 3  # Three+ executors should complete

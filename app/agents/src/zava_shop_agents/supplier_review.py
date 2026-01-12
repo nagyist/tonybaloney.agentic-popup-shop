@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft. All rights reserved.
 import os
 from dataclasses import dataclass
-from typing import Any, Never, Sequence
+from typing import Any, Never, Sequence, cast
 
 from agent_framework import (
     AgentExecutor,
@@ -22,8 +22,7 @@ from agent_framework import (
 from agent_framework_azure_ai import AzureAIClient
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.identity.aio import DefaultAzureCredential
-from pydantic import BaseModel
-from typing import cast
+from pydantic import BaseModel, ConfigDict
 
 from zava_shop_agents import MCPStreamableHTTPToolOTEL
 
@@ -32,6 +31,8 @@ DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
 
 class CompetitiveResult(BaseModel):
     is_competitive: bool
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def is_competitive():
@@ -52,9 +53,12 @@ class DispatchToExperts(Executor):
         self._expert_ids = expert_ids
 
     @handler
-    async def dispatch(self, prompt: str, ctx: WorkflowContext[AgentExecutorRequest]) -> None:
+    async def dispatch(self, prompt: str | ChatMessage, ctx: WorkflowContext[AgentExecutorRequest]) -> None:
         # Wrap the incoming prompt as a user message for each expert and request a response.
-        initial_message = ChatMessage(Role.USER, text=prompt)
+        if isinstance(prompt, str):
+            initial_message = ChatMessage(Role.USER, text=prompt)
+        else:
+            initial_message = prompt
         for expert_id in self._expert_ids:
             await ctx.send_message(
                 AgentExecutorRequest(messages=[initial_message], should_respond=True),
@@ -89,6 +93,7 @@ LEGAL_COMPLIANCE_EXPERT_ID = "Legal/Compliance Researcher"
 COMMERCIAL_EXPERT_ID = "Commercial Researcher"
 PROCUREMENT_EXPERT_ID = "Procurement Researcher"
 
+WORKFLOW_AGENT_DESCRIPTION = "Supplier Review Workflow Agent"
 
 class AggregateInsights(Executor):
     """Aggregates expert agent responses into a single consolidated result (fan-in)."""
@@ -107,6 +112,7 @@ class AggregateInsights(Executor):
 
         self.agent = client.create_agent(
             name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions="You are an expert evaluator. Given the consolidated insights, determine if the proposal is competitive or not competitive.",
             model_id=DEFAULT_MODEL,
             tools=tools,
@@ -158,6 +164,7 @@ class NegotiatorSummarizerExecutor(Executor):
         _id = "negotiator-summarizer" + agent_suffix
         self.agent = client.create_agent(
             name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are a skilled negotiator. Given that the proposal is competitive, draft a negotiation strategy and summarize key points."
                 "Consult with existing suppliers from the tools provided if needed to optimize terms."
@@ -183,6 +190,7 @@ class ReviewAndDismissExecutor(Executor):
         _id = "review-and-dismiss" + agent_suffix
         self.agent = client.create_agent(
             name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You have been asked to review a supplier proposal that is not competitive. Provide a summary of the reasons and suggest dismissal points."
             ),
@@ -237,10 +245,13 @@ def build_workflow(
         AzureAIClient(
             credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
         ).create_agent(
+            name='legal-compliance-researcher' + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You're an expert legal and compliance researcher. You review a proposal and provide feedback on behalf of Zava stores."
                 "Use the provided tools to find out information about other suppliers' ESG and compliance status."
             ),
+            model_id=DEFAULT_MODEL,
             tools=tools,
         ),
         id=LEGAL_COMPLIANCE_EXPERT_ID,
@@ -249,10 +260,13 @@ def build_workflow(
         AzureAIClient(
             credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
         ).create_agent(
+            name='commercial-researcher' + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are an expert commercial analyst. Evaluate supplier proposals for market competitiveness and value."
                 "Use the supplied tools to understand our existing stock levels, prices and demand."
             ),
+            model_id=DEFAULT_MODEL,
             tools=tools,
         ),
         id=COMMERCIAL_EXPERT_ID,
@@ -261,10 +275,13 @@ def build_workflow(
         AzureAIClient(
             credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
         ).create_agent(
+            name='procurement-researcher' + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are an expert procurement analyst. Analyze supplier proposals for cost-effectiveness and strategic fit."
                 "Use the supplied tools to check existing supplier contracts and performance."
             ),
+            model_id=DEFAULT_MODEL,
             tools=tools,
         ),
         id=PROCUREMENT_EXPERT_ID,
