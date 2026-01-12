@@ -39,7 +39,7 @@ from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 
 from zava_shop_shared.finance_sqlite import FinanceSQLiteProvider
-from .customers import get_customer_orders
+from ..customers import get_customer_orders
 
 agent_version = os.environ.get("AZURE_AI_PROJECT_AGENT_VERSION", None)
 if agent_version is not None and not agent_version.strip():
