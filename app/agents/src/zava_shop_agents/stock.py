@@ -16,17 +16,10 @@ from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 from azure.core.credentials_async import AsyncTokenCredential
 
-from pydantic import BaseModel, ConfigDict
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
+from zava_shop_agents import MCPStreamableHTTPToolOTEL, StrictModel
 
 
 WORKFLOW_AGENT_DESCRIPTION = "Stock Management Workflow Agent"
-
-
-class StrictModel(BaseModel):
-    """Base model with strict validation that rejects extra fields."""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 class StockItem(StrictModel):

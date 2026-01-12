@@ -22,17 +22,14 @@ from agent_framework import (
 from agent_framework_azure_ai import AzureAIClient
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.identity.aio import DefaultAzureCredential
-from pydantic import BaseModel, ConfigDict
 
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
+from zava_shop_agents import MCPStreamableHTTPToolOTEL, StrictModel
 
 DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
 
 
-class CompetitiveResult(BaseModel):
+class CompetitiveResult(StrictModel):
     is_competitive: bool
-
-    model_config = ConfigDict(extra="forbid")
 
 
 def is_competitive():

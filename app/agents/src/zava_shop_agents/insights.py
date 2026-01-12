@@ -6,10 +6,9 @@ from datetime import datetime
 from typing import List, Optional, Sequence, Union, cast
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 from agent_framework import (
     ChatAgent,
-    ChatMessage,
     Executor,
     ToolProtocol,
     Workflow,
@@ -23,19 +22,13 @@ from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 from azure.core.credentials_async import AsyncTokenCredential
 
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
+from zava_shop_agents import MCPStreamableHTTPToolOTEL, StrictModel
 
 logger = logging.getLogger(__name__)
 
 
 WORKFLOW_AGENT_DESCRIPTION = "Weekly Store Insights Workflow Agent"
 DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
-
-class StrictModel(BaseModel):
-    """Base model with strict validation that rejects extra fields."""
-
-    model_config = ConfigDict(extra="forbid")
-
 
 
 class WeatherAnalysisEvent(WorkflowEvent):
@@ -51,6 +44,7 @@ class WeatherAnalysisEvent(WorkflowEvent):
 
 class EventsAnalysisEvent(WorkflowEvent):
     """Event emitted when events analysis is complete."""
+    executor_id: Optional[str] = None
 
     def __init__(self, event_data: "EventsAnalysis"):
         super().__init__(
@@ -395,7 +389,7 @@ class DataCollector(Executor):
     """
 
     def __init__(self, id: str | None = None):
-        super().__init__(id=id or "data_collector")
+        super().__init__(id=id or "data-collector")
 
     @handler
     async def handle(
@@ -930,7 +924,7 @@ def build_workflow(
             request_timeout=30,
         )]
 
-    data_collector = DataCollector(id="data_collector")
+    data_collector = DataCollector()
     weather_analyzer = WeatherAnalyzer(
         AzureAIClient(credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL),
         agent_suffix=agent_suffix,
@@ -944,7 +938,7 @@ def build_workflow(
         agent_suffix=agent_suffix,
         tools=tools,
     )
-    insight_synthesizer = InsightSynthesizer(id="insight_synthesizer")
+    insight_synthesizer = InsightSynthesizer()
 
     workflow = (
         WorkflowBuilder(

@@ -1,44 +1,35 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-import json
 import logging
 import os
-from typing import List, Optional, Any
+from typing import List, Optional, Sequence, cast
 
-from pydantic import BaseModel, Field
 from agent_framework import (
     ChatAgent,
-    ChatMessage,
     Executor,
+    ToolProtocol,
+    Workflow,
     WorkflowBuilder,
     WorkflowContext,
     WorkflowEvent,
     handler,
 )
 from agent_framework_azure_ai import AzureAIClient
+from azure.core.credentials_async import AsyncTokenCredential
 from azure.identity.aio import DefaultAzureCredential
+from pydantic import Field
 
-from pydantic import BaseModel
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
+from zava_shop_agents import MCPStreamableHTTPToolOTEL, StrictModel
 
-chat_client = AzureAIClient(
-    credential=DefaultAzureCredential(
-        exclude_shared_token_cache_credential=True,
-        exclude_visual_studio_code_credential=True,
-    ),
-    project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
-    model_deployment_name=os.environ.get(
-        "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
-    ),
-)
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
-
+WORKFLOW_AGENT_DESCRIPTION = "Admin Weekly Insights Workflow Agent"
+DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
 
 logger = logging.getLogger(__name__)
 
 
 class StorePerformanceEvent(WorkflowEvent):
     """Event emitted when store performance analysis is complete."""
+    executor_id: Optional[str]
 
     def __init__(self, performance_data: "StorePerformanceAnalysis"):
         super().__init__(
@@ -49,6 +40,7 @@ class StorePerformanceEvent(WorkflowEvent):
 
 class AdminInsightsSynthesizedEvent(WorkflowEvent):
     """Event emitted when final admin insights are synthesized."""
+    executor_id: Optional[str]
 
     def __init__(self, insights: "AdminWeeklyInsights"):
         super().__init__("Admin weekly insights generated successfully")
@@ -57,20 +49,8 @@ class AdminInsightsSynthesizedEvent(WorkflowEvent):
 
 DEFAULT_AZURE_API_VERSION = "2024-02-15-preview"
 
-# Finance MCP Server tool
-finance_mcp = MCPStreamableHTTPToolOTEL(
-    name="FinanceMCP",
-    url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
-    headers={
-        "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"
-    },
-    load_tools=True,
-    load_prompts=False,
-    request_timeout=30,
-)
 
-
-class AdminContext(BaseModel):
+class AdminContext(StrictModel):
     """Admin user context for enterprise-wide insights.
 
     Contains user role verification for admin-level access.
@@ -84,7 +64,7 @@ class AdminContext(BaseModel):
     )
 
 
-class InsightAction(BaseModel):
+class InsightAction(StrictModel):
     """Defines a clickable action button displayed on insight cards in the UI."""
 
     label: str = Field(..., description="Button label text")
@@ -96,7 +76,7 @@ class InsightAction(BaseModel):
     )
 
 
-class Insight(BaseModel):
+class Insight(StrictModel):
     """Represents a single insight card displayed in the admin dashboard."""
 
     type: str = Field(
@@ -109,7 +89,7 @@ class Insight(BaseModel):
     )
 
 
-class StorePerformanceMetric(BaseModel):
+class StorePerformanceMetric(StrictModel):
     """Performance metrics for a single store."""
 
     store_id: int
@@ -124,7 +104,7 @@ class StorePerformanceMetric(BaseModel):
     efficiency_rank: int
 
 
-class StorePerformanceAnalysis(BaseModel):
+class StorePerformanceAnalysis(StrictModel):
     """Output from StorePerformanceAnalyzer sent to InsightSynthesizer.
 
     Contains comprehensive performance data for all stores ranked by
@@ -157,12 +137,12 @@ class StorePerformanceAnalysis(BaseModel):
     )
 
 
-class AdminWeeklyInsights(BaseModel):
+class AdminWeeklyInsights(StrictModel):
     """Final workflow output returned to the admin dashboard UI.
 
     Provides enterprise-wide insights focused on comparative store
     performance, efficiency metrics, and strategic recommendations.
-    
+
     Note: Inherits WeeklyInsights schema for API compatibility.
     Admin workflow doesn't use weather/events, so those fields are None.
     """
@@ -192,73 +172,26 @@ class AdminWeeklyInsights(BaseModel):
     )
 
 
+class PerformanceToolResponse(StrictModel):
+    stores: List[StorePerformanceMetric]
+
+
 class AdminContextCollector(Executor):
     """Collects admin context and initiates performance analysis."""
 
     def __init__(self, id: str | None = None):
-        super().__init__(id=id or "admin_context_collector")
+        super().__init__(id=id or "admin-context-collector")
 
     @handler
     async def handle(
-        self, message: ChatMessage, ctx: WorkflowContext[AdminContext]
+        self, parameters: AdminContext, ctx: WorkflowContext[AdminContext]
     ) -> None:
-        """Extract admin context from input message.
-
-        Args:
-            message: ChatMessage containing user role and optional days_back in format:
-                    "Generate admin weekly insights:\nUser Role: admin\nDays Back: 30"
-            ctx: Workflow context for broadcasting AdminContext
-
-        Raises:
-            ValueError: If user is not an admin
-        """
-        import re
-        
-        text = message.text.strip()
-        user_role = None
-        days_back = 30  # Default value
-
-        try:
-            # Extract user_role using regex
-            # Pattern: "User Role: admin" (case-insensitive)
-            role_match = re.search(r'user[_ ]role\s*:\s*([a-z_]+)', text, re.IGNORECASE)
-            if role_match:
-                user_role = role_match.group(1)
-
-            # Extract days_back if present
-            # Pattern: "Days Back: 30" (case-insensitive)
-            days_match = re.search(r'days[_ ]back\s*:\s*(\d+)', text, re.IGNORECASE)
-            if days_match:
-                days_back = int(days_match.group(1))
-
-            # Validate we got user_role
-            if user_role is None:
-                raise ValueError(
-                    f"Could not parse user_role from message. "
-                    f"Expected format: 'User Role: <role>'. "
-                    f"Got: {text}"
-                )
-
-            # Verify admin role
-            if user_role.lower() != "admin":
-                raise ValueError(
-                    f"Admin insights require admin role. Got: {user_role}"
-                )
-
-            admin_context = AdminContext(
-                user_role=user_role, days_back=days_back
-            )
-
-            await ctx.send_message(admin_context)
-
-        except Exception as e:
-            logger.error(
-                "Failed to parse admin context: %s", str(e), exc_info=True
-            )
+        if not parameters.user_role or parameters.user_role.strip().lower() != "admin":
             raise ValueError(
-                f"Failed to extract admin information from message. "
-                f"Expected admin user role. Got: {message.text}"
-            ) from e
+                "User role is required for admin insights"
+            )
+
+        await ctx.send_message(parameters)
 
 
 class StorePerformanceAnalyzer(Executor):
@@ -266,10 +199,12 @@ class StorePerformanceAnalyzer(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, id: str | None = None):
+    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+        _id = "store-performance-analyzer" + agent_suffix
         # Create agent with Finance MCP tools - agent handles connection automatically
-        self.agent = chat_client.create_agent(
-            name="Store Performance Analyzer",
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are an enterprise retail analyst analyzing store performance across all locations. "
                 "Your task: retrieve comprehensive performance metrics for all stores using the "
@@ -278,9 +213,14 @@ class StorePerformanceAnalyzer(Executor):
                 "The tool returns stores ranked by revenue per customer (efficiency metric). "
                 "Return the raw JSON data from the tool so it can be parsed and analyzed."
             ),
-            tools=[finance_mcp],
+            tools=tools,
         )
-        super().__init__(id=id or "store_performance_analyzer")
+        self.analysis_agent = client.create_agent(
+            name="store-performance-analyzer-summarizer" + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
+            instructions="Provide concise executive insights from store performance data."
+        )
+        super().__init__(id=_id)
 
     @handler
     async def handle(
@@ -296,45 +236,42 @@ class StorePerformanceAnalyzer(Executor):
                 f"Use the get_store_performance_comparison tool with days_back={context.days_back}. "
                 f"Return the complete results."
             )
-            
-            # Define response schema for the agent
-            class PerformanceToolResponse(BaseModel):
-                stores: List[StorePerformanceMetric]
-            
+
             agent_response = await self.agent.run(
                 prompt,
                 response_format=PerformanceToolResponse
             )
-            
+            value = cast(PerformanceToolResponse, agent_response.value)
+
             # Extract stores from structured response
-            stores = agent_response.value.stores if agent_response.value else []
-            
+            stores = value.stores if value else []
+
             # If no results from agent, raise error
             if not stores:
                 raise ValueError("No store performance data returned from Finance MCP tool")
-            
+
             # Calculate totals
             total_revenue = sum(s.total_revenue for s in stores)
             total_customers = sum(s.unique_customers for s in stores)
-            
+
             # Extract top and bottom performers
             top_3 = stores[:3] if len(stores) >= 3 else stores
             bottom_3 = stores[-3:] if len(stores) >= 3 else []
-            
+
             # Format top performers
             top_performers = [
-                f"🥇 #{store.efficiency_rank} {store.store_name}: ${store.revenue_per_customer:,.2f}/customer "
+                f"#{store.efficiency_rank} {store.store_name}: ${store.revenue_per_customer:,.2f}/customer "
                 f"({store.unique_customers} customers, ${store.total_revenue:,.2f} revenue)"
                 for store in top_3
             ]
-            
+
             # Format bottom performers
             bottom_performers = [
                 f"#{store.efficiency_rank} {store.store_name}: ${store.revenue_per_customer:,.2f}/customer "
                 f"({store.unique_customers} customers, ${store.total_revenue:,.2f} revenue)"
                 for store in bottom_3
             ]
-            
+
             # Generate analysis summary using separate LLM agent
             analysis_prompt = (
                 f"Analyze this store performance data and provide executive insights:\n\n"
@@ -351,29 +288,25 @@ class StorePerformanceAnalyzer(Executor):
                 f"2) Key patterns or insights about what makes top stores successful\n"
                 f"3) One actionable recommendation for improving bottom performers"
             )
-            
-            analysis_agent = chat_client.create_agent(
-                name="PerformanceAnalyzer",
-                instructions="Provide concise executive insights from store performance data."
-            )
-            analysis_response = await analysis_agent.run(analysis_prompt)
+
+            analysis_response = await self.analysis_agent.run(analysis_prompt)
             analysis_text = analysis_response.text or "Performance analysis completed."
-            
+
             # Create detailed description for UI
             description_parts = [
-                f"📊 Analyzed {context.days_back}-day performance across {len(stores)} stores.",
-                f"💰 Total Revenue: ${total_revenue:,.2f} | 👥 Total Customers: {total_customers:,}",
+                f"Analyzed {context.days_back}-day performance across {len(stores)} stores.",
+                f"Total Revenue: ${total_revenue:,.2f} | Total Customers: {total_customers:,}",
                 "",
-                "🏆 Top Performers:",
+                "Top Performers:",
             ]
             description_parts.extend(f"  {line}" for line in top_performers[:3])
-            description_parts.extend(["", "📉 Needs Improvement:"])
+            description_parts.extend(["", "Needs Improvement:"])
             description_parts.extend(f"  {line}" for line in bottom_performers[:3])
-            
+
             # Create insight for UI
             performance_insight = Insight(
                 type="info",
-                title="🏪 Store Performance Comparison",
+                title="Store Performance Comparison",
                 description="\n".join(description_parts),
                 action=InsightAction(
                     label="View Detailed Analysis",
@@ -412,8 +345,8 @@ class StorePerformanceAnalyzer(Executor):
             # Create fallback insight for UI
             fallback_insight = Insight(
                 type="warning",
-                title="🏪 Store Performance Comparison",
-                description="⚠️ Unable to retrieve store performance data at this time. Check Finance MCP server availability.",
+                title="Store Performance Comparison",
+                description="Unable to retrieve store performance data at this time. Check Finance MCP server availability.",
                 action=None,
             )
 
@@ -438,13 +371,13 @@ class AdminInsightSynthesizer(Executor):
     """Synthesizes admin-level insights from store performance analysis."""
 
     def __init__(self, id: str | None = None):
-        super().__init__(id=id or "admin_insight_synthesizer")
+        super().__init__(id=id or "admin-insight-synthesizer")
 
     @handler
     async def handle(
         self,
         performance_data: StorePerformanceAnalysis,
-        ctx: WorkflowContext[AdminWeeklyInsights],
+        ctx: WorkflowContext[AdminWeeklyInsights, AdminWeeklyInsights],
     ) -> None:
         """Generate final admin insights from performance analysis."""
 
@@ -484,7 +417,12 @@ class AdminInsightSynthesizer(Executor):
         await ctx.yield_output(insights)
 
 
-def get_admin_workflow():
+def build_workflow(
+    credential: AsyncTokenCredential | None = None,
+    project_endpoint: str | None = None,
+    tools: Sequence[ToolProtocol] | None = None,
+    agent_suffix: str = "",
+) -> Workflow:
     """Create and return the admin weekly insights workflow.
 
     Simpler than store manager workflow - no weather/events needed.
@@ -494,13 +432,35 @@ def get_admin_workflow():
     Returns:
         Workflow: Configured admin workflow ready for execution
     """
-    context_collector = AdminContextCollector(id="admin_context_collector")
+
+    if credential is None:
+        credential = DefaultAzureCredential(
+            exclude_shared_token_cache_credential=True,
+            exclude_visual_studio_code_credential=True,
+        )
+    project_endpoint = project_endpoint or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
+
+    # Finance MCP Server tool
+    if not tools:
+        tools = [MCPStreamableHTTPToolOTEL(
+            name="FinanceMCP",
+            url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
+            headers={
+                "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"
+            },
+            load_tools=True,
+            load_prompts=False,
+            request_timeout=30,
+        )]
+
+
+    context_collector = AdminContextCollector()
     performance_analyzer = StorePerformanceAnalyzer(
-        id="store_performance_analyzer"
+        AzureAIClient(credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL),
+        agent_suffix=agent_suffix,
+        tools=tools,
     )
-    insight_synthesizer = AdminInsightSynthesizer(
-        id="admin_insight_synthesizer"
-    )
+    insight_synthesizer = AdminInsightSynthesizer()
 
     workflow = (
         WorkflowBuilder(
@@ -519,6 +479,3 @@ def get_admin_workflow():
     )
 
     return workflow
-
-
-admin_workflow = get_admin_workflow()
