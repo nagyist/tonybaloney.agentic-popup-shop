@@ -1,8 +1,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-
-# SQLAlchemy imports for SQLite
 from sqlalchemy import select
 from zava_shop_shared.models.sqlite.customers import Customer as CustomerModel
 from zava_shop_shared.models.sqlite.stores import Store as StoreModel

@@ -1,31 +1,36 @@
 """
 ChatKit router for customer AI chat functionality.
 """
+
+import logging
+import os
 from datetime import datetime
+from typing import AsyncIterator, Callable
+
 from agent_framework import ChatAgent, ai_function
+from agent_framework_azure_ai import AzureAIClient
+from agent_framework_chatkit import ThreadItemConverter, stream_agent_response
+from azure.identity.aio import DefaultAzureCredential
+from chatkit.server import ChatKitServer, StreamingResult
+from chatkit.store import StoreItemType, default_generate_id
+from chatkit.types import (
+    ThreadItemDoneEvent,
+    ThreadMetadata,
+    ThreadStreamEvent,
+    UserMessageItem,
+    WidgetItem,
+)
+from chatkit.widgets import Button, Card, Col, Divider, Row, Spacer, Text, WidgetRoot
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+from zava_shop_shared.finance_sqlite import FinanceSQLiteProvider
+
 from zava_shop_api.memory_store import MemoryStore
 from zava_shop_api.models import OrderResponse, TokenData
 from zava_shop_api.openid_auth import get_current_user
-from chatkit.server import ChatKitServer, StreamingResult
-from chatkit.types import (
-    ThreadMetadata,
-    ThreadItemDoneEvent,
-    UserMessageItem,
-    ThreadStreamEvent,
-    WidgetItem,
-)
-from chatkit.store import StoreItemType, default_generate_id
-from chatkit.actions import ActionConfig
-from chatkit.widgets import Button, Card, Col, Divider, Image, Row, Text, Title, WidgetRoot, Spacer
 
-from agent_framework_chatkit import ThreadItemConverter, stream_agent_response
-import os
-
-from typing import AsyncIterator, Callable
-import logging
+from ..customers import get_customer_orders
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +40,6 @@ router = APIRouter(prefix="/api/chatkit", tags=["chatkit"])
 # Initialize ChatKit data store (SQLite for development)
 data_store = MemoryStore()
 
-from agent_framework_azure_ai import AzureAIClient
-from azure.identity.aio import DefaultAzureCredential
-
-from zava_shop_shared.finance_sqlite import FinanceSQLiteProvider
-from ..customers import get_customer_orders
-
 agent_version = os.environ.get("AZURE_AI_PROJECT_AGENT_VERSION", None)
 if agent_version is not None and not agent_version.strip():
     agent_version = None
@@ -49,11 +48,13 @@ chat_client = AzureAIClient(
     async_credential=DefaultAzureCredential(),
     agent_name=os.environ.get("AZURE_AI_PROJECT_AGENT_ID", "zava-customer-agent"),
     agent_version=agent_version,
-    model_deployment_name=os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
+    model_deployment_name=os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini"),
 )
+
 
 class ChatKitContext(BaseModel):
     """Context passed to ChatKit server."""
+
     user_id: str
     customer_id: int | None
     role: str
@@ -89,8 +90,8 @@ async def stream_widget(
 
     yield ThreadItemDoneEvent(type="thread.item.done", item=widget_item)
 
-def render_order_widget(data: OrderResponse) -> WidgetRoot:
 
+def render_order_widget(data: OrderResponse) -> WidgetRoot:
     order_rows = [
         Row(
             align="center",
@@ -99,59 +100,46 @@ def render_order_widget(data: OrderResponse) -> WidgetRoot:
                 # Image(src=f"/images/{order_item.image_url}", size=48),
                 Col(
                     children=[
+                        Text(value=order_item.product_name, size="md", weight="semibold", color="emphasis"),
                         Text(
-                            value=order_item.product_name,
-                            size="md",
-                            weight="semibold",
-                            color="emphasis"
+                            value=f"{order_item.quantity} x ${order_item.unit_price:.2f}", size="sm", color="secondary"
                         ),
-                        Text(
-                            value=f"{order_item.quantity} x ${order_item.unit_price:.2f}",
-                            size="sm",
-                            color="secondary"
-                        )
                     ]
                 )
-            ]
+            ],
         )
         for order_item in data.items
     ]
 
     return Card(
-            size="sm",
-            children=[
-                Col(
-                    children=order_rows
-                ),
-                
-                Divider(flush=True),
-                
-                Col(
-                    children=[
-                        Row(
-                            children=[
-                                Text(value="Total with tax", weight="semibold", size="sm"),
-                                Spacer(),
-                                Text(value=f"${data.order_total:.2f}", weight="semibold", size="sm")
-                            ]
-                        )
-                    ]
-                ),
-                
-                Divider(flush=True),
-                
-                Col(
-                    children=[
-                        Button(
-                            label="Return",
-                            # on_click_action=ClickAction(type="purchase"),
-                            style="primary",
-                            block=True
-                        )
-                    ]
-                )
-            ]
-        )
+        size="sm",
+        children=[
+            Col(children=order_rows),
+            Divider(flush=True),
+            Col(
+                children=[
+                    Row(
+                        children=[
+                            Text(value="Total with tax", weight="semibold", size="sm"),
+                            Spacer(),
+                            Text(value=f"${data.order_total:.2f}", weight="semibold", size="sm"),
+                        ]
+                    )
+                ]
+            ),
+            Divider(flush=True),
+            Col(
+                children=[
+                    Button(
+                        label="Return",
+                        # on_click_action=ClickAction(type="purchase"),
+                        style="primary",
+                        block=True,
+                    )
+                ]
+            ),
+        ],
+    )
 
 
 class ZavaShopChatKitServer(ChatKitServer):
@@ -203,21 +191,17 @@ class ZavaShopChatKitServer(ChatKitServer):
                     raise ValueError("Customer ID is not available in context")
 
                 orders_response = await get_customer_orders(
-                    customer_id=context.customer_id,
-                    session=session,
-                    limit=limit
+                    customer_id=context.customer_id, session=session, limit=limit
                 )
                 orders.extend(orders_response.orders)
                 # Convert to dict for AI function return
                 return orders_response.model_dump()
 
-
-
         async for event in stream_agent_response(
-                self.agent.run_stream(agent_messages, tools=[get_orders]),
-                thread_id=thread.id,
-            ):
-                yield event
+            self.agent.run_stream(agent_messages, tools=[get_orders]),
+            thread_id=thread.id,
+        ):
+            yield event
 
         if orders:
             for order in orders:
@@ -225,7 +209,7 @@ class ZavaShopChatKitServer(ChatKitServer):
                 async for widget_event in stream_widget(
                     thread_id=thread.id,
                     widget=widget,
-                    copy_text=f"Order #{order.order_id}: {order.total_items} from {order.store_name}, Total: ${order.order_total}"
+                    copy_text=f"Order #{order.order_id}: {order.total_items} from {order.store_name}, Total: ${order.order_total}",
                 ):
                     yield widget_event
 
@@ -233,10 +217,9 @@ class ZavaShopChatKitServer(ChatKitServer):
 # Initialize server
 chatkit_server = ZavaShopChatKitServer(data_store)
 
+
 @router.post("")
-async def chatkit_endpoint(request: Request,
-                           current_user: TokenData = Depends(get_current_user)
-):
+async def chatkit_endpoint(request: Request, current_user: TokenData = Depends(get_current_user)):
     """
     Main ChatKit endpoint that handles all chat operations.
     Supports both JSON and SSE streaming responses.
@@ -245,10 +228,7 @@ async def chatkit_endpoint(request: Request,
     try:
         # Verify user has customer role
         if current_user.user_role != "customer":
-            raise HTTPException(
-                status_code=403,
-                detail="Only customers can access this endpoint"
-            )
+            raise HTTPException(status_code=403, detail="Only customers can access this endpoint")
 
         # Pass user context to ChatKit
         context = ChatKitContext(
@@ -270,7 +250,4 @@ async def chatkit_endpoint(request: Request,
         raise
     except Exception as e:
         logger.error(f"ChatKit endpoint error: {e}", exc_info=True)
-        return JSONResponse(
-            content={"error": str(e)},
-            status_code=500
-        )
+        return JSONResponse(content={"error": str(e)}, status_code=500)
