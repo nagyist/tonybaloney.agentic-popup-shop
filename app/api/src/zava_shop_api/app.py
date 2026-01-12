@@ -11,7 +11,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 # Initialize in startup event
 from fastapi_cache import FastAPICache
@@ -29,7 +29,6 @@ from zava_shop_shared.config import Config
 # SQLAlchemy imports for SQLite
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -60,15 +59,11 @@ logger = logging.getLogger(__name__)
 # Configuration
 config = Config()
 
-# Database connections
-sqlalchemy_engine: Optional[AsyncEngine] = None
-async_session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
-
-async def get_store_name(store_id: int) -> Optional[str]:
+async def get_store_name(store_id: int, request: Request) -> Optional[str]:
     """Get store name by ID"""
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             stmt = select(StoreModel.store_name).where(StoreModel.store_id == store_id)
             result = await session.execute(stmt)
             store_name = result.scalar_one_or_none()
@@ -77,10 +72,10 @@ async def get_store_name(store_id: int) -> Optional[str]:
         return None
 
 
-async def get_user_name(user_id: int) -> Optional[str]:
+async def get_user_name(user_id: int, request: Request) -> Optional[str]:
     """Get user name by ID"""
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             stmt = select(CustomerModel.first_name, CustomerModel.last_name).where(CustomerModel.customer_id == user_id)
             result = await session.execute(stmt)
             row = result.first()
@@ -95,8 +90,6 @@ async def get_user_name(user_id: int) -> Optional[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan - startup and shutdown events"""
-    global sqlalchemy_engine, async_session_factory
-
     # Startup
     logger.info("Starting API Server...")
 
@@ -131,7 +124,10 @@ async def lifespan(app: FastAPI):
     backend = InMemoryBackend()
     FastAPICache.init(backend=backend)
 
-    yield
+    yield {
+        "engine": sqlalchemy_engine,
+        "session_factory": async_session_factory,
+    }
 
     # Shutdown
     logger.info("Shutting down API Server...")
@@ -149,25 +145,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
-
-
-# Helper function to get SQLAlchemy session
-def get_db_session() -> AsyncSession:
-    """
-    Get a new SQLAlchemy async session.
-
-    Returns:
-        AsyncSession: A new async database session
-
-    Raises:
-        RuntimeError: If the session factory is not initialized
-    """
-    if not async_session_factory:
-        raise RuntimeError(
-            "Database session factory not initialized. "
-            "Ensure the application has started."
-        )
-    return async_session_factory()
 
 
 # Configure CORS
@@ -199,7 +176,7 @@ async def health_check():
 
 # Authentication endpoint
 @app.post("/api/login", response_model=LoginResponse)
-async def login(credentials: LoginRequest) -> LoginResponse:
+async def login(credentials: LoginRequest, request: Request) -> LoginResponse:
     """
     Login endpoint to authenticate users and receive bearer token.
 
@@ -212,9 +189,9 @@ async def login(credentials: LoginRequest) -> LoginResponse:
     # Get store name if store manager
     store_name = None
     if user.store_id:
-        store_name = await get_store_name(user.store_id)
+        store_name = await get_store_name(user.store_id, request)
     if user.customer_id:
-        name = await get_user_name(user.customer_id)
+        name = await get_user_name(user.customer_id, request)
     else:
         name = None
 
@@ -246,13 +223,13 @@ async def logout(authorization: str = Header(None)):
 # Stores endpoint
 @app.get("/api/stores", response_model=StoreList)
 @cache(expire=600)
-async def get_stores() -> StoreList:
+async def get_stores(request: Request) -> StoreList:
     """
     Get all store locations with inventory counts and details.
     Returns comprehensive store information for the stores page.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Build SQLAlchemy query with aggregations
             stmt = (
                 select(
@@ -343,13 +320,13 @@ async def get_stores() -> StoreList:
 # Categories endpoint
 @app.get("/api/categories", response_model=CategoryList)
 @cache(expire=3600)
-async def get_categories() -> CategoryList:
+async def get_categories(request: Request) -> CategoryList:
     """
     Get all product categories.
     Returns a list of all available categories in the system.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Build SQLAlchemy query for categories
             stmt = (
                 select(

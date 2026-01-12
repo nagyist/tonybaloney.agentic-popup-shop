@@ -11,7 +11,7 @@ from agent_framework import (
     WorkflowOutputEvent,
     WorkflowStartedEvent,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi_cache.decorator import cache
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
@@ -26,7 +26,6 @@ from zava_shop_shared.models.sqlite.products import Product as ProductModel
 from zava_shop_shared.models.sqlite.stores import Store as StoreModel
 from zava_shop_shared.models.sqlite.suppliers import Supplier as SupplierModel
 
-from zava_shop_api.app import get_db_session
 from zava_shop_api.models import (
     CacheInfoResponse,
     CacheInvalidationResponse,
@@ -60,6 +59,7 @@ router = APIRouter(prefix="/api/management", tags=["management"])
 @router.get("/dashboard/top-categories", response_model=TopCategoryList)
 @cache(expire=600)
 async def get_top_categories(
+    request: Request,
     limit: int = Query(5, ge=1, le=10, description="Number of top categories to return"),
     current_user: TokenData = Depends(get_current_user),
 ) -> TopCategoryList:
@@ -69,7 +69,7 @@ async def get_top_categories(
     Requires authentication. Store managers see only their store's data.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             logger.info(f"Fetching top {limit} categories by inventory value for user {current_user.username}...")
 
             stmt = (
@@ -351,14 +351,14 @@ async def get_insights_cache_info(
 
 
 @router.get("/suppliers", response_model=SupplierList)
-async def get_suppliers(current_user: TokenData = Depends(get_current_user)) -> SupplierList:
+async def get_suppliers(request: Request, current_user: TokenData = Depends(get_current_user)) -> SupplierList:
     """
     Get all suppliers with their details and associated product categories.
     Returns comprehensive supplier information for management interface.
     Requires authentication. Store managers see only suppliers for products in their store.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             logger.info(f"Fetching suppliers for user {current_user.username}...")
 
             # Get basic supplier info
@@ -446,6 +446,7 @@ async def get_suppliers(current_user: TokenData = Depends(get_current_user)) -> 
 
 @router.get("/inventory", response_model=InventoryResponse)
 async def get_inventory(
+    request: Request,
     store_id: Optional[int] = None,
     product_id: Optional[int] = None,
     category: Optional[str] = None,
@@ -467,7 +468,7 @@ async def get_inventory(
         limit: Maximum number of records to return
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             logger.info(
                 f"Fetching inventory (store={store_id}, product={product_id}, category={category}, low_stock={low_stock_only})..."
             )
@@ -629,6 +630,7 @@ async def get_inventory(
 
 @router.get("/products", response_model=ManagementProductResponse)
 async def get_products(
+    request: Request,
     category: Optional[str] = None,
     supplier_id: Optional[int] = None,
     discontinued: Optional[bool] = None,
@@ -650,7 +652,7 @@ async def get_products(
         offset: Pagination offset
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             logger.info("Fetching products...")
 
             # Build base query

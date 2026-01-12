@@ -1,11 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from zava_shop_shared.models.sqlite.customers import Customer as CustomerModel
 from zava_shop_shared.models.sqlite.stores import Store as StoreModel
 
-from zava_shop_api.app import get_db_session
 from zava_shop_api.customers import get_customer_orders
 from zava_shop_api.models import CustomerProfile, OrderListResponse, TokenData
 from zava_shop_api.openid_auth import get_current_user
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/profile", response_model=CustomerProfile)
-async def get_user_profile(current_user: TokenData = Depends(get_current_user)) -> CustomerProfile:
+async def get_user_profile(request: Request, current_user: TokenData = Depends(get_current_user)) -> CustomerProfile:
     """
     Get profile information for the authenticated customer user.
     Requires authentication with customer role.
@@ -31,7 +30,7 @@ async def get_user_profile(current_user: TokenData = Depends(get_current_user)) 
         if not current_user.customer_id:
             raise HTTPException(status_code=403, detail="Customer ID not found in token")
 
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Query customer profile
             stmt = (
                 select(
@@ -75,7 +74,7 @@ async def get_user_profile(current_user: TokenData = Depends(get_current_user)) 
 
 
 @router.get("/orders", response_model=OrderListResponse)
-async def get_user_orders(current_user: TokenData = Depends(get_current_user)) -> OrderListResponse:
+async def get_user_orders(request: Request, current_user: TokenData = Depends(get_current_user)) -> OrderListResponse:
     """
     Get all orders for the authenticated customer user.
     Requires authentication with customer role.
@@ -89,7 +88,7 @@ async def get_user_orders(current_user: TokenData = Depends(get_current_user)) -
         if not current_user.customer_id:
             raise HTTPException(status_code=403, detail="Customer ID not found in token")
 
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             orders = await get_customer_orders(customer_id=current_user.customer_id, session=session)
 
         return orders

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 import logging
 
 from fastapi_cache.decorator import cache
@@ -9,8 +9,6 @@ from zava_shop_shared.models.sqlite.categories import Category as CategoryModel
 from zava_shop_shared.models.sqlite.product_types import ProductType as ProductTypeModel
 from zava_shop_shared.models.sqlite.suppliers import Supplier as SupplierModel
 from zava_shop_api.models import Product, ProductList
-from zava_shop_api.app import get_db_session
-
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -24,6 +22,7 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 @router.get("/featured", response_model=ProductList)
 @cache(expire=600)
 async def get_featured_products(
+    request: Request,
     limit: int = Query(8, ge=1, le=50, description="Number of products to return"),
 ) -> ProductList:
     """
@@ -31,7 +30,7 @@ async def get_featured_products(
     Returns a curated selection of products with good ratings and availability.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Query for featured products
             # Strategy: Get products with good variety across categories
             # Prefer products with higher margins (more popular/profitable)
@@ -93,6 +92,7 @@ async def get_featured_products(
 # Get products by category endpoint
 @router.get("/category/{category}", response_model=ProductList)
 async def get_products_by_category(
+    request: Request,
     category: str,
     limit: int = Query(50, ge=1, le=100, description="Max products to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
@@ -102,7 +102,7 @@ async def get_products_by_category(
     Category names: Accessories, Apparel - Bottoms, Apparel - Tops, Footwear, Outerwear
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Get total products in category for pagination
             total_stmt = (
                 select(func.count())
@@ -178,13 +178,13 @@ async def get_products_by_category(
 
 # Get product by ID endpoint
 @router.get("/{product_id}", response_model=Product)
-async def get_product_by_id(product_id: int) -> Product:
+async def get_product_by_id(request: Request, product_id: int) -> Product:
     """
     Get a single product by its ID.
     Returns complete product information including category, type, and supplier.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Query single product by ID
             stmt = (
                 select(
@@ -240,13 +240,13 @@ async def get_product_by_id(product_id: int) -> Product:
 
 
 @router.get("/sku/{sku}", response_model=Product)
-async def get_product_by_sku(sku: str) -> Product:
+async def get_product_by_sku(request: Request, sku: str) -> Product:
     """
     Get a single product by its SKU.
     Returns complete product information including category, type, and supplier.
     """
     try:
-        async with get_db_session() as session:
+        async with request.app.state.session_factory() as session:
             # Query single product by SKU
             stmt = (
                 select(

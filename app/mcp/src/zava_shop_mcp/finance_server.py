@@ -7,8 +7,10 @@ finance agents with order policies, contracts, sales analysis, and inventory.
 
 The server uses pre-written SQL queries (not dynamically generated SQL) with SQLite ORM.
 """
+
 from zava_shop_mcp.keycloak_provider import KeycloakAuthProvider
 from opentelemetry.instrumentation.auto_instrumentation import initialize
+
 initialize()
 from datetime import datetime, timedelta
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
@@ -24,6 +26,7 @@ from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 
 from opentelemetry.instrumentation.mcp import McpInstrumentor
+
 McpInstrumentor().instrument()
 from pydantic import Field
 from typing import Annotated
@@ -52,7 +55,6 @@ from zava_shop_shared.models.results import (
 )
 
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -65,10 +67,12 @@ logger.setLevel(logging.DEBUG)
 
 db: FinanceSQLiteProvider = FinanceSQLiteProvider()
 
+
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator:
     yield
     db.close_engine()
+
 
 KEYCLOAK_REALM_URL = os.environ["KEYCLOAK_REALM_URL"]
 keycloak_base_url = os.environ["KEYCLOAK_MCP_SERVER_BASE_URL"]
@@ -89,9 +93,12 @@ mcp = FastMCP("Zava Finance Agent MCP Server", auth=auth, lifespan=app_lifespan)
 async def health_check(request: Request) -> Response:
     return JSONResponse({"status": "ok"})
 
+
 @mcp.tool()
 async def get_company_order_policy(
-    department: Annotated[str, Field(description="Department name to filter policies")] = ""
+    department: Annotated[
+        str, Field(description="Department name to filter policies")
+    ] = "",
 ) -> list[CompanyPolicyResult]:
     """
     Get company order processing policies and budget authorization rules.
@@ -113,8 +120,7 @@ async def get_company_order_policy(
         >>>     print(f"Policy: {policy.policy_name} - Type: {policy.policy_type}")
     """
     try:
-        logger.info(
-            f"Retrieving company order policy for department: {department}")
+        logger.info(f"Retrieving company order policy for department: {department}")
         await db.create_pool()
         async with db.get_session() as session:
             # Build query using ORM
@@ -134,9 +140,9 @@ async def get_company_order_policy(
                 else_="General company policy",
             ).label("policy_description")
 
-            content_length = func.length(
-                CompanyPolicy.policy_content
-            ).label("content_length")
+            content_length = func.length(CompanyPolicy.policy_content).label(
+                "content_length"
+            )
 
             stmt = select(
                 CompanyPolicy.policy_id,
@@ -164,9 +170,7 @@ async def get_company_order_policy(
                     | (CompanyPolicy.department.is_(None))
                 )
 
-            stmt = stmt.order_by(
-                CompanyPolicy.policy_type, CompanyPolicy.policy_name
-            )
+            stmt = stmt.order_by(CompanyPolicy.policy_type, CompanyPolicy.policy_name)
 
             result = await session.execute(stmt)
             rows = result.mappings().all()
@@ -182,7 +186,9 @@ async def get_company_order_policy(
 
 @mcp.tool()
 async def get_supplier_contract(
-    supplier_id: Annotated[int, Field(description="The unique identifier for the supplier")]
+    supplier_id: Annotated[
+        int, Field(description="The unique identifier for the supplier")
+    ],
 ) -> list[SupplierContractResult]:
     """
     Get supplier contract information including terms and conditions.
@@ -205,8 +211,7 @@ async def get_supplier_contract(
         >>>     print(f"Contract expires in {contract['days_until_expiry']} days")
     """
     try:
-        logger.info(
-            f"Retrieving supplier contract for supplier_id: {supplier_id}")
+        logger.info(f"Retrieving supplier contract for supplier_id: {supplier_id}")
         await db.create_pool()
         async with db.get_session() as session:
             # Calculate days until expiry
@@ -233,32 +238,38 @@ async def get_supplier_contract(
             ).label("renewal_due_soon")
 
             # Build query using ORM
-            stmt = select(
-                Supplier.supplier_name,
-                Supplier.supplier_code,
-                Supplier.contact_email,
-                Supplier.contact_phone,
-                SupplierContract.contract_id,
-                SupplierContract.contract_number,
-                SupplierContract.contract_status,
-                SupplierContract.start_date,
-                SupplierContract.end_date,
-                SupplierContract.contract_value,
-                SupplierContract.payment_terms,
-                SupplierContract.auto_renew,
-                SupplierContract.created_at.label("contract_created"),
-                days_until_expiry,
-                renewal_due_soon,
-            ).select_from(Supplier).outerjoin(
-                SupplierContract,
-                Supplier.supplier_id == SupplierContract.supplier_id,
-            ).where(
-                and_(
-                    Supplier.supplier_id == supplier_id,
-                    (SupplierContract.contract_status == "active")
-                    | (SupplierContract.contract_status.is_(None)),
+            stmt = (
+                select(
+                    Supplier.supplier_name,
+                    Supplier.supplier_code,
+                    Supplier.contact_email,
+                    Supplier.contact_phone,
+                    SupplierContract.contract_id,
+                    SupplierContract.contract_number,
+                    SupplierContract.contract_status,
+                    SupplierContract.start_date,
+                    SupplierContract.end_date,
+                    SupplierContract.contract_value,
+                    SupplierContract.payment_terms,
+                    SupplierContract.auto_renew,
+                    SupplierContract.created_at.label("contract_created"),
+                    days_until_expiry,
+                    renewal_due_soon,
                 )
-            ).order_by(SupplierContract.start_date.desc())
+                .select_from(Supplier)
+                .outerjoin(
+                    SupplierContract,
+                    Supplier.supplier_id == SupplierContract.supplier_id,
+                )
+                .where(
+                    and_(
+                        Supplier.supplier_id == supplier_id,
+                        (SupplierContract.contract_status == "active")
+                        | (SupplierContract.contract_status.is_(None)),
+                    )
+                )
+                .order_by(SupplierContract.start_date.desc())
+            )
 
             result = await session.execute(stmt)
             rows = result.mappings().all()
@@ -273,7 +284,9 @@ async def get_supplier_contract(
 async def get_historical_sales_data(
     days_back: Annotated[int, Field(description="Number of days to look back")] = 30,
     store_id: Annotated[int, Field(description="Store ID to filter results")] = -1,
-    category_name: Annotated[str, Field(description="Category name to filter results")] = ""
+    category_name: Annotated[
+        str, Field(description="Category name to filter results")
+    ] = "",
 ) -> list[SalesDataResult]:
     """
     Get historical sales data with revenue, order counts, and customer metrics.
@@ -300,38 +313,37 @@ async def get_historical_sales_data(
     try:
         logger.info(
             f"Retrieving historical sales data for store_id: {store_id}, "
-            f"category_name: {category_name}, days_back: {days_back}")
+            f"category_name: {category_name}, days_back: {days_back}"
+        )
         await db.create_pool()
         async with db.get_session() as session:
             # Calculate cutoff date
             cutoff_date = datetime.now() - timedelta(days=days_back)
 
             # Calculate month (YYYY-MM format for better readability)
-            month = func.strftime('%Y-%m', Order.order_date).label("month")
+            month = func.strftime("%Y-%m", Order.order_date).label("month")
 
             # Build query using ORM
-            stmt = select(
-                month,
-                Store.store_name,
-                Store.is_online,
-                Category.category_name,
-                func.count(func.distinct(Order.order_id)).label("order_count"),
-                func.sum(OrderItem.total_amount).label("total_revenue"),
-                func.avg(OrderItem.total_amount).label("avg_order_value"),
-                func.sum(OrderItem.quantity).label("total_units_sold"),
-                func.count(func.distinct(Order.customer_id)).label(
-                    "unique_customers"
-                ),
-            ).select_from(Order).join(
-                OrderItem, Order.order_id == OrderItem.order_id
-            ).join(
-                Store, Order.store_id == Store.store_id
-            ).join(
-                Product, OrderItem.product_id == Product.product_id
-            ).join(
-                Category, Product.category_id == Category.category_id
-            ).where(
-                Order.order_date >= cutoff_date.date()
+            stmt = (
+                select(
+                    month,
+                    Store.store_name,
+                    Store.is_online,
+                    Category.category_name,
+                    func.count(func.distinct(Order.order_id)).label("order_count"),
+                    func.sum(OrderItem.total_amount).label("total_revenue"),
+                    func.avg(OrderItem.total_amount).label("avg_order_value"),
+                    func.sum(OrderItem.quantity).label("total_units_sold"),
+                    func.count(func.distinct(Order.customer_id)).label(
+                        "unique_customers"
+                    ),
+                )
+                .select_from(Order)
+                .join(OrderItem, Order.order_id == OrderItem.order_id)
+                .join(Store, Order.store_id == Store.store_id)
+                .join(Product, OrderItem.product_id == Product.product_id)
+                .join(Category, Product.category_id == Category.category_id)
+                .where(Order.order_date >= cutoff_date.date())
             )
 
             if store_id != -1 and store_id != 0:
@@ -364,8 +376,7 @@ async def get_top_selling_products(
         Field(gt=0, le=365, description="Number of days to look back"),
     ] = 30,
     store_id: Annotated[
-        Optional[int],
-        Field(description="Store ID to filter results")
+        Optional[int], Field(description="Store ID to filter results")
     ] = None,
     category_name: Annotated[
         Optional[str],
@@ -374,7 +385,7 @@ async def get_top_selling_products(
     limit: Annotated[
         int,
         Field(gt=0, le=50, description="Number of top products to return"),
-    ] = 5
+    ] = 5,
 ) -> list[TopProductSalesResult]:
     """
     Get top-selling products by units sold and revenue.
@@ -402,28 +413,28 @@ async def get_top_selling_products(
     try:
         logger.info(
             f"Retrieving top selling products for store_id: {store_id}, "
-            f"category_name: {category_name}, days_back: {days_back}, limit: {limit}")
+            f"category_name: {category_name}, days_back: {days_back}, limit: {limit}"
+        )
         await db.create_pool()
         async with db.get_session() as session:
             # Calculate cutoff date
             cutoff_date = datetime.now() - timedelta(days=days_back)
 
             # Build query using ORM - group by product
-            stmt = select(
-                Product.product_name,
-                Product.sku,
-                Category.category_name,
-                func.count(func.distinct(Order.order_id)).label("order_count"),
-                func.sum(OrderItem.total_amount).label("total_revenue"),
-                func.sum(OrderItem.quantity).label("total_units_sold"),
-            ).select_from(Order).join(
-                OrderItem, Order.order_id == OrderItem.order_id
-            ).join(
-                Product, OrderItem.product_id == Product.product_id
-            ).join(
-                Category, Product.category_id == Category.category_id
-            ).where(
-                Order.order_date >= cutoff_date.date()
+            stmt = (
+                select(
+                    Product.product_name,
+                    Product.sku,
+                    Category.category_name,
+                    func.count(func.distinct(Order.order_id)).label("order_count"),
+                    func.sum(OrderItem.total_amount).label("total_revenue"),
+                    func.sum(OrderItem.quantity).label("total_units_sold"),
+                )
+                .select_from(Order)
+                .join(OrderItem, Order.order_id == OrderItem.order_id)
+                .join(Product, OrderItem.product_id == Product.product_id)
+                .join(Category, Product.category_id == Category.category_id)
+                .where(Order.order_date >= cutoff_date.date())
             )
 
             if store_id is not None:
@@ -435,14 +446,18 @@ async def get_top_selling_products(
                     func.upper(Category.category_name) == category_name.upper()
                 )
 
-            stmt = stmt.group_by(
-                Product.product_name,
-                Product.sku,
-                Category.category_name,
-            ).order_by(
-                func.sum(OrderItem.quantity).desc(),
-                func.sum(OrderItem.total_amount).desc(),
-            ).limit(limit)
+            stmt = (
+                stmt.group_by(
+                    Product.product_name,
+                    Product.sku,
+                    Category.category_name,
+                )
+                .order_by(
+                    func.sum(OrderItem.quantity).desc(),
+                    func.sum(OrderItem.total_amount).desc(),
+                )
+                .limit(limit)
+            )
 
             result = await session.execute(stmt)
             rows = result.mappings().all()
@@ -455,8 +470,10 @@ async def get_top_selling_products(
 @mcp.tool()
 async def get_current_inventory_status(
     store_id: Annotated[int, Field(description="Store ID to filter results")] = -1,
-    category_name: Annotated[str, Field(description="Category name to filter results")] = "",
-    low_stock_threshold: Annotated[int, Field(description="Low stock threshold")] = 10
+    category_name: Annotated[
+        str, Field(description="Category name to filter results")
+    ] = "",
+    low_stock_threshold: Annotated[int, Field(description="Low stock threshold")] = 10,
 ) -> list[InventoryStatusResult]:
     """
     Get current inventory status across stores with values and low stock alerts.
@@ -488,16 +505,17 @@ async def get_current_inventory_status(
         logger.info(
             f"Retrieving current inventory status for store_id: {store_id},"
             f" category_name: {category_name}, "
-            f" low_stock_threshold: {low_stock_threshold}")
+            f" low_stock_threshold: {low_stock_threshold}"
+        )
         await db.create_pool()
         async with db.get_session() as session:
             # Calculate inventory and retail values
-            inventory_value = (
-                Inventory.stock_level * Product.cost
-            ).label("inventory_value")
-            retail_value = (
-                Inventory.stock_level * Product.base_price
-            ).label("retail_value")
+            inventory_value = (Inventory.stock_level * Product.cost).label(
+                "inventory_value"
+            )
+            retail_value = (Inventory.stock_level * Product.base_price).label(
+                "retail_value"
+            )
 
             # Calculate low stock alert
             low_stock_alert = case(
@@ -506,29 +524,27 @@ async def get_current_inventory_status(
             ).label("low_stock_alert")
 
             # Build query using ORM
-            stmt = select(
-                Store.store_name,
-                Store.is_online,
-                Product.product_name,
-                Product.sku,
-                Category.category_name,
-                ProductType.type_name.label("product_type"),
-                Inventory.stock_level,
-                Product.cost,
-                Product.base_price,
-                inventory_value,
-                retail_value,
-                low_stock_alert,
-            ).select_from(Inventory).join(
-                Store, Inventory.store_id == Store.store_id
-            ).join(
-                Product, Inventory.product_id == Product.product_id
-            ).join(
-                Category, Product.category_id == Category.category_id
-            ).join(
-                ProductType, Product.type_id == ProductType.type_id
-            ).where(
-                Product.discontinued.is_(False)
+            stmt = (
+                select(
+                    Store.store_name,
+                    Store.is_online,
+                    Product.product_name,
+                    Product.sku,
+                    Category.category_name,
+                    ProductType.type_name.label("product_type"),
+                    Inventory.stock_level,
+                    Product.cost,
+                    Product.base_price,
+                    inventory_value,
+                    retail_value,
+                    low_stock_alert,
+                )
+                .select_from(Inventory)
+                .join(Store, Inventory.store_id == Store.store_id)
+                .join(Product, Inventory.product_id == Product.product_id)
+                .join(Category, Product.category_id == Category.category_id)
+                .join(ProductType, Product.type_id == ProductType.type_id)
+                .where(Product.discontinued.is_(False))
             )
 
             if store_id != -1 and store_id != 0:
@@ -555,7 +571,7 @@ async def get_current_inventory_status(
 
 @mcp.tool()
 async def get_stores(
-    store_name: Annotated[str, Field(description="Store name to filter results")] = ""
+    store_name: Annotated[str, Field(description="Store name to filter results")] = "",
 ) -> list[StoreResult]:
     """
     Get store information with optional filtering by name.
@@ -642,7 +658,7 @@ async def get_store_performance_comparison(
                 "Must be between 1 and 365 days."
             ),
         ),
-    ] = 30
+    ] = 30,
 ) -> list[StorePerformanceResult]:
     """
     Compare performance metrics across all stores to identify top and underperforming locations.
@@ -667,7 +683,7 @@ async def get_store_performance_comparison(
     """
     try:
         logger.info(
-            f"Retrieving store performance comparison for days_back: {days_back}"
+            "Retrieving store performance comparison for days_back: %d", days_back
         )
         await db.create_pool()
         async with db.get_session() as session:
@@ -678,39 +694,43 @@ async def get_store_performance_comparison(
             # Calculate revenue per customer for fair comparison across market sizes
             total_revenue = func.coalesce(func.sum(OrderItem.total_amount), 0)
             unique_customers = func.count(func.distinct(Order.customer_id))
-            
+
             # Revenue per customer
             revenue_per_customer = case(
-                (unique_customers > 0, total_revenue / unique_customers),
-                else_=0
+                (unique_customers > 0, total_revenue / unique_customers), else_=0
             ).label("revenue_per_customer")
-            
-            stmt = select(
-                Store.store_id,
-                Store.store_name,
-                Store.is_online,
-                total_revenue.label("total_revenue"),
-                func.count(func.distinct(Order.order_id)).label("total_orders"),
-                func.coalesce(func.sum(OrderItem.quantity), 0).label("total_units_sold"),
-                unique_customers.label("unique_customers"),
-                func.coalesce(
-                    func.avg(OrderItem.total_amount), 0
-                ).label("avg_order_value"),
-                revenue_per_customer,
-            ).select_from(Store).outerjoin(
-                Order,
-                and_(
-                    Store.store_id == Order.store_id,
-                    Order.order_date >= cutoff_date.date(),
-                ),
-            ).outerjoin(
-                OrderItem, Order.order_id == OrderItem.order_id
-            ).group_by(
-                Store.store_id,
-                Store.store_name,
-                Store.is_online,
-            ).order_by(
-                revenue_per_customer.desc()
+
+            stmt = (
+                select(
+                    Store.store_id,
+                    Store.store_name,
+                    Store.is_online,
+                    total_revenue.label("total_revenue"),
+                    func.count(func.distinct(Order.order_id)).label("total_orders"),
+                    func.coalesce(func.sum(OrderItem.quantity), 0).label(
+                        "total_units_sold"
+                    ),
+                    unique_customers.label("unique_customers"),
+                    func.coalesce(func.avg(OrderItem.total_amount), 0).label(
+                        "avg_order_value"
+                    ),
+                    revenue_per_customer,
+                )
+                .select_from(Store)
+                .outerjoin(
+                    Order,
+                    and_(
+                        Store.store_id == Order.store_id,
+                        Order.order_date >= cutoff_date.date(),
+                    ),
+                )
+                .outerjoin(OrderItem, Order.order_id == OrderItem.order_id)
+                .group_by(
+                    Store.store_id,
+                    Store.store_name,
+                    Store.is_online,
+                )
+                .order_by(revenue_per_customer.desc())
             )
 
             result = await session.execute(stmt)
@@ -728,6 +748,7 @@ async def get_store_performance_comparison(
     except Exception as e:
         logger.error(f"Error in get_store_performance_comparison: {e}")
         raise e
+
 
 if __name__ == "__main__":
     logger.info("🚀 Starting Supplier Agent MCP Server")

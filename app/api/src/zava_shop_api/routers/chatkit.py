@@ -45,7 +45,7 @@ if agent_version is not None and not agent_version.strip():
     agent_version = None
 
 chat_client = AzureAIClient(
-    async_credential=DefaultAzureCredential(),
+    credential=DefaultAzureCredential(),
     agent_name=os.environ.get("AZURE_AI_PROJECT_AGENT_ID", "zava-customer-agent"),
     agent_version=agent_version,
     model_deployment_name=os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini"),
