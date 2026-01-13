@@ -124,10 +124,11 @@ async def lifespan(app: FastAPI):
     backend = InMemoryBackend()
     FastAPICache.init(backend=backend)
 
-    yield {
-        "engine": sqlalchemy_engine,
-        "session_factory": async_session_factory,
-    }
+    # Store on app.state so routers can access them
+    app.state.engine = sqlalchemy_engine
+    app.state.session_factory = async_session_factory
+
+    yield
 
     # Shutdown
     logger.info("Shutting down API Server...")

@@ -69,7 +69,7 @@ db: FinanceSQLiteProvider = FinanceSQLiteProvider()
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator:
     yield
-    db.close_engine()
+    await db.close_engine()
 
 
 KEYCLOAK_REALM_URL = os.environ["KEYCLOAK_REALM_URL"]

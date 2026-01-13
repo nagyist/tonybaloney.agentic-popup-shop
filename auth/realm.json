@@ -116,6 +116,20 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "manager1",
+      "enabled": true,
+      "email": "manager1@example.com",
+      "firstName": "Manager",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "manager123",
+          "temporary": false
+        }
+      ]
     }
   ],
   "components": {
