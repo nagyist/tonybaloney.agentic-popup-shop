@@ -313,7 +313,10 @@ def build_workflow(
     )
 
     workflow = (
-        WorkflowBuilder(name="Supplier Review Workflow")
+        WorkflowBuilder(
+            name="Supplier Review Workflow",
+            description="Workflow to review supplier proposals and determine competitiveness.",
+        )
         .set_start_executor(dispatcher)
         .add_fan_out_edges(dispatcher, [compliance, commercial, procurement])
         .add_fan_in_edges([compliance, commercial, procurement], aggregator)

@@ -8,52 +8,50 @@ finance agents with order policies, contracts, sales analysis, and inventory.
 The server uses pre-written SQL queries (not dynamically generated SQL) with SQLite ORM.
 """
 
-from zava_shop_mcp.keycloak_provider import KeycloakAuthProvider
 from opentelemetry.instrumentation.auto_instrumentation import initialize
 
-initialize()
-from datetime import datetime, timedelta
-from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
-from fastmcp import FastMCP
-from typing import AsyncIterator, Optional
-from datetime import datetime, UTC
-import logging
+from zava_shop_mcp.keycloak_provider import KeycloakAuthProvider
 
-from zava_shop_shared.finance_sqlite import FinanceSQLiteProvider
+initialize()
+import logging
 import os
 from contextlib import asynccontextmanager
-from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
+from datetime import UTC, datetime, timedelta
+from typing import AsyncIterator, Optional
 
+from fastmcp import FastMCP
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from opentelemetry.instrumentation.mcp import McpInstrumentor
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from zava_shop_shared.finance_sqlite import FinanceSQLiteProvider
 
 McpInstrumentor().instrument()
-from pydantic import Field
 from typing import Annotated
-from sqlalchemy import select, func, case, and_
 
+from pydantic import Field
+from sqlalchemy import and_, case, func, select
+from zava_shop_shared.models.results import (
+    CompanyPolicyResult,
+    InventoryStatusResult,
+    SalesDataResult,
+    StorePerformanceResult,
+    StoreResult,
+    SupplierContractResult,
+    TopProductSalesResult,
+)
 from zava_shop_shared.models.sqlite import (
+    Category,
     CompanyPolicy,
-    Supplier,
-    SupplierContract,
-    Store,
+    Inventory,
     Order,
     OrderItem,
     Product,
-    Category,
     ProductType,
-    Inventory,
+    Store,
+    Supplier,
+    SupplierContract,
 )
-from zava_shop_shared.models.results import (
-    CompanyPolicyResult,
-    SupplierContractResult,
-    SalesDataResult,
-    TopProductSalesResult,
-    InventoryStatusResult,
-    StoreResult,
-    StorePerformanceResult,
-)
-
 
 # Configure logging
 logging.basicConfig(
@@ -180,7 +178,7 @@ async def get_company_order_policy(
 
             return [CompanyPolicyResult(**row) for row in rows]
     except Exception as e:
-        logger.error(f"Error in get_company_order_policy: {e}")
+        logger.exception("Error in get_company_order_policy")
         raise e
 
 
@@ -276,7 +274,7 @@ async def get_supplier_contract(
             return [SupplierContractResult(**row) for row in rows]
 
     except Exception as e:
-        logger.error(f"Error in get_supplier_contract: {e}")
+        logger.exception("Error in get_supplier_contract")
         raise e
 
 
@@ -365,7 +363,7 @@ async def get_historical_sales_data(
             rows = result.mappings().all()
             return [SalesDataResult(**row) for row in rows]
     except Exception as e:
-        logger.error(f"Error in get_historical_sales_data: {e}")
+        logger.exception("Error in get_historical_sales_data")
         raise e
 
 
@@ -463,7 +461,7 @@ async def get_top_selling_products(
             rows = result.mappings().all()
             return [TopProductSalesResult(**row) for row in rows]
     except Exception as e:
-        logger.error(f"Error in get_top_selling_products: {e}")
+        logger.exception("Error in get_top_selling_products")
         raise e
 
 
@@ -565,7 +563,7 @@ async def get_current_inventory_status(
             rows = result.mappings().all()
             return [InventoryStatusResult(**row) for row in rows]
     except Exception as e:
-        logger.error(f"Error in get_current_inventory_status: {e}")
+        logger.exception("Error in get_current_inventory_status")
         raise e
 
 
@@ -619,7 +617,7 @@ async def get_stores(
             rows = result.mappings().all()
             return [StoreResult(**row) for row in rows]
     except Exception as e:
-        logger.error(f"Error in get_stores: {e}")
+        logger.exception("Error in get_stores")
         raise e
 
 
@@ -641,7 +639,7 @@ async def get_current_utc_date() -> str:
     try:
         return datetime.now(UTC).isoformat()
     except Exception as e:
-        logger.error(f"Error getting current UTC date: {e}")
+        logger.exception("Error getting current UTC date")
         raise e
 
 
@@ -746,7 +744,7 @@ async def get_store_performance_comparison(
             return ranked_results
 
     except Exception as e:
-        logger.error(f"Error in get_store_performance_comparison: {e}")
+        logger.exception("Error in get_store_performance_comparison")
         raise e
 
 

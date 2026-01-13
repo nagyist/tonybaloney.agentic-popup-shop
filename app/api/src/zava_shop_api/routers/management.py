@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from fastapi_cache.decorator import cache
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
-from zava_shop_agents.admin_insights import admin_workflow as admin_insights_workflow
-from zava_shop_agents.insights import build_workflow as insights_workflow
+from zava_shop_agents.admin_insights import build_workflow as admin_insights_workflow, AdminContext
+from zava_shop_agents.insights import build_workflow as insights_workflow, DataCollectionParameters
 from zava_shop_agents.insights_cache import get_cache
 from zava_shop_agents.stock import build_workflow as stock_workflow
 from zava_shop_shared.models.sqlite.categories import Category as CategoryModel
@@ -191,22 +191,24 @@ async def get_weekly_insights(
         if current_user.user_role == "admin":
             # Admin users get enterprise-wide insights
             logger.info("Using admin insights workflow for enterprise analysis")
-            workflow = admin_insights_workflow
-            agent_input = f"Generate admin weekly insights:\nUser Role: {current_user.user_role}\nDays Back: 30"
+            workflow = admin_insights_workflow()
+            agent_input = AdminContext(
+                user_role=current_user.user_role,
+                days_back=30,
+            )
         else:
             # Store managers get operational insights for their store
             logger.info(f"Using store manager insights workflow for store {target_store_id}")
             workflow = insights_workflow()
-            agent_input = (
-                f"Generate weekly insights for:\nStore ID: {target_store_id}\nUser Role: {current_user.user_role}"
+            agent_input = DataCollectionParameters(
+                store_id=target_store_id,
+                user_role=current_user.user_role,
             )
-
-        agent_message = ChatMessage(role="user", text=agent_input)
 
         insights_result: Optional[WeeklyInsights] = None
         fallback_payload: Optional[str] = None
 
-        async for event in workflow.run_stream(agent_message):
+        async for event in workflow.run_stream(agent_input):
             if isinstance(event, ExecutorFailedEvent):
                 logger.error(
                     "Insights workflow failed in executor %s: %s",

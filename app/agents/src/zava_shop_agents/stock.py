@@ -191,7 +191,10 @@ def build_workflow(
     )
 
     workflow = (
-        WorkflowBuilder(name="Restocking Workflow")
+        WorkflowBuilder(
+            name="Restocking Workflow",
+            description="A workflow to manage stock restocking based on user requests.",
+        )
         .set_start_executor(stock)
         .add_edge(stock, context)
         .add_edge(context, summarizer)
