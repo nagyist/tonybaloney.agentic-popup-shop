@@ -248,6 +248,15 @@ module web 'br/public:avm/ptn/azd/container-app-upsert:0.2.0' = {
   }
 }
 
+module bingSearchModule 'bing_search.bicep' = {
+  name: 'bing-search-module'
+  scope: rg
+  params: {
+    account_name: aiFoundry.outputs.aiServicesName
+    bingSearchName: 'bingsearch-aiservices${toLower(resourceToken)}'
+  }
+}
+
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = monitoring.outputs.applicationInsightsConnectionString
 output APPLICATIONINSIGHTS_NAME string = monitoring.outputs.applicationInsightsName
 output AZURE_CONTAINER_ENVIRONMENT_NAME string = containerApps.outputs.environmentName

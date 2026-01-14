@@ -1,5 +1,6 @@
 import logging
-from fastapi import Header, HTTPException, status
+from typing import Annotated, Optional
+from fastapi import Cookie, Header, HTTPException, Query, WebSocket, WebSocketException, status
 from keycloak import KeycloakOpenID
 from keycloak.exceptions import KeycloakAuthenticationError
 from zava_shop_api.models import TokenData
@@ -166,15 +167,21 @@ async def get_current_user(authorization: str = Header(...)) -> TokenData:
     return token_data
 
 
-async def get_current_user_from_token(token: str) -> TokenData:
+async def ws_get_current_user_from_token(
+    websocket: WebSocket,
+    session: Annotated[Optional[str], Cookie()] = None,
+    token: Annotated[Optional[str], Query()] = None,
+):
+    if session is None and token is None:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+    t = session or token
     """Get user data from a token string directly."""
-    token_data = AuthService.verify_token(token)
+    token_data = AuthService.verify_token(t) # pyright: ignore[reportArgumentType]
     if token_data is None:
         logger.warning("Invalid or expired token for user retrieval")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
+        raise WebSocketException(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Invalid or expired token",
         )
 
     return token_data

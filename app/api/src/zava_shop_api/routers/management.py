@@ -46,7 +46,7 @@ from zava_shop_api.models import (
 
 from ..openid_auth import (
     get_current_user,
-    get_current_user_from_token,
+    ws_get_current_user_from_token,
 )
 
 # Configure logging
@@ -780,7 +780,10 @@ async def get_products(
 
 
 @router.websocket("/ws/management/ai-agent/inventory")
-async def websocket_ai_agent_inventory(websocket: WebSocket):
+async def websocket_ai_agent_inventory(
+        websocket: WebSocket,
+        current_user: TokenData = Depends(ws_get_current_user_from_token),
+) -> None:
     """
     WebSocket endpoint for AI Inventory Agent.
     Streams workflow events back to the frontend in real-time.
@@ -788,27 +791,11 @@ async def websocket_ai_agent_inventory(websocket: WebSocket):
     Store managers automatically use their assigned store_id.
     """
     await websocket.accept()
-    current_user: Optional[TokenData] = None
 
     try:
         # Receive the initial request from the client
         data = await websocket.receive_text()
         request_data = json.loads(data)
-
-        # Extract and validate authentication token
-        token = request_data.get("token")
-        if not token:
-            await websocket.send_json(
-                {
-                    "type": "error",
-                    "message": "Authentication token required",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            await websocket.close(code=1008, reason="Authentication required")
-            return
-
-        current_user = await get_current_user_from_token(token)
 
         input_message = request_data.get("message", "Analyze inventory and recommend restocking priorities")
 
@@ -911,12 +898,6 @@ async def websocket_ai_agent_inventory(websocket: WebSocket):
         logger.info("🔌 WebSocket disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        try:
-            await websocket.send_json({"type": "error", "message": str(e), "timestamp": None})
-        except:
-            pass
+        await websocket.send_json({"type": "error", "message": str(e), "timestamp": None})
     finally:
-        try:
-            await websocket.close()
-        except:
-            pass
+        await websocket.close()
