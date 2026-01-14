@@ -113,14 +113,14 @@ class StorePerformanceAnalysis(StrictModel):
 
     days_back: int
     stores: List[StorePerformanceMetric] = Field(
-        default_factory=list, description="All stores ranked by efficiency"
+        ..., description="All stores ranked by efficiency"
     )
     top_performers: List[str] = Field(
-        default_factory=list,
+        ...,
         description="Top 3 most efficient stores (formatted strings)",
     )
     bottom_performers: List[str] = Field(
-        default_factory=list,
+        ...,
         description="Bottom 3 stores needing improvement (formatted strings)",
     )
     total_revenue: float = Field(
@@ -161,7 +161,7 @@ class AdminWeeklyInsights(StrictModel):
         default=None,
         description="Not used in admin workflow"
     )
-    stock_items: List[str] = Field(
+    stock_items: Optional[list[str]] = Field(
         default_factory=list,
         description="Not used in admin workflow"
     )

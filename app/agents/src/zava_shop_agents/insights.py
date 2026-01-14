@@ -228,7 +228,7 @@ class EventDetail(StrictModel):
         description="Why this event is relevant for retail - brief explanation",
     )
     product_categories: List[str] = Field(
-        default_factory=list,
+        ...,
         description="Product categories that would be in high demand (e.g., 'Athletic Wear', 'Outerwear', 'Accessories')",
     )
 
@@ -241,7 +241,7 @@ class EventsAgentResponse(StrictModel):
     """
 
     events: List[EventDetail] = Field(
-        default_factory=list,
+        ...,
         description="List of 1-3 major upcoming events in the next 21 days with expected attendance over 5000 people",
     )
     summary: str = Field(
@@ -265,7 +265,7 @@ class EventsAnalysis(StrictModel):
     city: str
     state: str
     events: List[EventDetail] = Field(
-        default_factory=list, description="List of relevant upcoming events"
+        ..., description="List of relevant upcoming events"
     )
     summary: str = Field(
         ..., description="Overall summary of events happening in the area"
@@ -290,15 +290,15 @@ class ProductsAnalysis(StrictModel):
         ...,
         description="Formatted analysis from MCP tools including inventory levels and sales performance",
     )
-    low_stock_items: List[str] = Field(
+    low_stock_items: Optional[list[str]] = Field(
         default_factory=list,
         description="List of low stock items with quantities",
     )
-    top_products: List[str] = Field(
+    top_products: Optional[List[str]] = Field(
         default_factory=list,
         description="List of top performing products with order counts",
     )
-    recommendations: List[str] = Field(
+    recommendations: Optional[List[str]] = Field(
         default_factory=list, description="Stock recommendations based on data"
     )
     insight: Insight = Field(
@@ -335,7 +335,7 @@ class ProductsAgentResponse(StrictModel):
     """
 
     products: List[ProductDetail] = Field(
-        default_factory=list,
+        ...,
         description=(
             "Top 5 selling products from the last 21 days, ordered by "
             "units sold descending. Each product must include product_name, "
@@ -363,7 +363,7 @@ class WeeklyInsights(StrictModel):
         None, description="Summary of local events"
     )
     stock_items: List[str] = Field(
-        default_factory=list,
+        ...,
         description="List of specific product items to stock up on (determined by stock agent)",
     )
     insights: List[Insight] = Field(
