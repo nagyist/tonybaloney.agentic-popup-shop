@@ -36,3 +36,5 @@ resource bing_search_account_connection 'Microsoft.CognitiveServices/accounts/co
     }
   }
 }
+
+output BING_SEARCH_ACCOUNT_CONNECTION_OUTPUT string = bing_search_account_connection.id
