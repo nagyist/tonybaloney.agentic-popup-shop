@@ -198,6 +198,7 @@ class TokenData(BaseModel):
     user_role: str
     store_id: Optional[int] = None
     customer_id: Optional[int] = None
+    access_token: Optional[str] = None  # Original Keycloak token for downstream propagation
 
 
 class InsightAction(BaseModel):

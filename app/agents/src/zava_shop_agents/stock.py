@@ -159,6 +159,7 @@ def build_workflow(
     project_endpoint: str | None = None,
     mcp: ToolProtocol | Sequence[ToolProtocol] | None = None,
     agent_suffix: str = "",
+    user_token: str | None = None,
 ) -> Workflow:
     if credential is None:
         credential = DefaultAzureCredential(
@@ -168,10 +169,12 @@ def build_workflow(
     project_endpoint = project_endpoint or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
 
     if mcp is None:
+        # Use user token if provided, otherwise fall back to DEV_GUEST_TOKEN for local dev
+        auth_token = user_token or os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')
         mcp = MCPStreamableHTTPToolOTEL(
             name="FinanceMCP",
             url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
-            headers={"Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"},
+            headers={"Authorization": f"Bearer {auth_token}"},
             load_prompts=False,
             request_timeout=30,
         )

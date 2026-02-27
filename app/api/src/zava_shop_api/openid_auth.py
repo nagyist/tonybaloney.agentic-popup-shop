@@ -70,6 +70,7 @@ class SessionData(BaseModel):
             user_role=self.role,
             store_id=self.store_id,
             customer_id=self.customer_id,
+            access_token=self.token,  # Pass the original Keycloak token for downstream propagation
         )
 
 

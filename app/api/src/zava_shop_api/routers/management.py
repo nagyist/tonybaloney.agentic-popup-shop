@@ -191,7 +191,7 @@ async def get_weekly_insights(
         if current_user.user_role == "admin":
             # Admin users get enterprise-wide insights
             logger.info("Using admin insights workflow for enterprise analysis")
-            workflow = admin_insights_workflow()
+            workflow = admin_insights_workflow(user_token=current_user.access_token)
             agent_input = AdminContext(
                 user_role=current_user.user_role,
                 days_back=30,
@@ -199,7 +199,7 @@ async def get_weekly_insights(
         else:
             # Store managers get operational insights for their store
             logger.info(f"Using store manager insights workflow for store {target_store_id}")
-            workflow = insights_workflow()
+            workflow = insights_workflow(user_token=current_user.access_token)
             agent_input = DataCollectionParameters(
                 store_id=target_store_id,
                 user_role=current_user.user_role,
@@ -833,7 +833,7 @@ async def websocket_ai_agent_inventory(
         input: ChatMessage = ChatMessage(role="user", text=full_message)
 
         workflow_output = None
-        workflow = stock_workflow()
+        workflow = stock_workflow(user_token=current_user.access_token)
         try:
             async for event in workflow.run_stream(input):
                 now = datetime.now(timezone.utc).isoformat()

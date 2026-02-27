@@ -422,6 +422,7 @@ def build_workflow(
     project_endpoint: str | None = None,
     tools: Sequence[ToolProtocol] | None = None,
     agent_suffix: str = "",
+    user_token: str | None = None,
 ) -> Workflow:
     """Create and return the admin weekly insights workflow.
 
@@ -442,11 +443,13 @@ def build_workflow(
 
     # Finance MCP Server tool
     if not tools:
+        # Use user token if provided, otherwise fall back to DEV_GUEST_TOKEN for local dev
+        auth_token = user_token or os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')
         tools = [MCPStreamableHTTPToolOTEL(
             name="FinanceMCP",
             url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
             headers={
-                "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"
+                "Authorization": f"Bearer {auth_token}"
             },
             load_tools=True,
             load_prompts=False,

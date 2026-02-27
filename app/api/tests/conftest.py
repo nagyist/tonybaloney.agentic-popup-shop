@@ -4,6 +4,16 @@ Pytest configuration and fixtures for API testing.
 This module provides shared fixtures and configuration for all tests.
 """
 
+import os
+
+# Set required environment variables before any other imports
+# These are needed by Settings class in openid_auth.py
+os.environ.setdefault("KEYCLOAK_SERVER_URL", "http://localhost:8080")
+os.environ.setdefault("KEYCLOAK_REALM", "test-realm")
+os.environ.setdefault("KEYCLOAK_CLIENT_ID", "test-client")
+os.environ.setdefault("KEYCLOAK_CLIENT_SECRET", "test-secret")
+os.environ.setdefault("SQLITE_DATABASE_PATH", ":memory:")
+
 import pytest
 from fastapi.testclient import TestClient
 from typing import Generator
