@@ -7,6 +7,12 @@ This is a multi-service application designed to showcase integration of agents i
 - Integration of MCP servers into agents
 - Using tracing to monitor multi-agent workflows
 
+## Authentication
+
+> ![WARNING]
+> This template comes with a Keycloak Docker image to mimic OAuth2 claims and login. The role of the Keyclock IdP is to show how to authenticate frontend through to the MCP.
+> It has hardcoded usernames and passwords. Only use this for development. 
+
 ## Requirements
 
 The easiest way to fulfill the requirements is to launch this as a Code Space or DevContainer, then you can skip this section.
