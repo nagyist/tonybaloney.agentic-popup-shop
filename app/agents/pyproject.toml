@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "Agent implementations for the shop application"
 requires-python = ">=3.12"
 dependencies = [
-    "agent-framework-core==1.0.0b251112",
+    "agent-framework-core==1.0.0b260116",
     "azure-identity>=1.23.0,<2.0.0",
     "opentelemetry-instrumentation-openai-v2",
-    "agent-framework-devui==1.0.0b251112",
+    "agent-framework-devui==1.0.0b260116",
     "opentelemetry-exporter-otlp",
     "azure-monitor-opentelemetry",
     "azure-monitor-opentelemetry-exporter",
@@ -15,10 +15,27 @@ dependencies = [
     "pillow>=12.0.0",
     "requests",
     # Azure AI preview
-    "agent-framework-azure-ai==1.0.0b251112",
+    "agent-framework-azure-ai==1.0.0b260116",
     "aiohttp",
+
+    "zava-shop-shared",
 ]
 
 [build-system]
 requires = ["uv_build>=0.9.3,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+zava-shop-shared = { path = "../shared", editable = true }
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.ruff]
+line-length = 120
+ignore = [
+    "E402",
+]

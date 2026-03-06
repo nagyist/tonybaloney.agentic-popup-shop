@@ -1,54 +1,36 @@
-
+# Copyright (c) Microsoft. All rights reserved.
+import os
 from dataclasses import dataclass
+from typing import Any, Never, Sequence, cast
 
-from pydantic import BaseModel
 from agent_framework import (
     AgentExecutor,
     AgentExecutorRequest,
     AgentExecutorResponse,
+    Case,
+    ChatAgent,
     ChatMessage,
+    Default,
     Executor,
     Role,
+    ToolProtocol,
+    Workflow,
     WorkflowBuilder,
     WorkflowContext,
-    Case,
-    Default,
     handler,
 )
-from typing import Any, Never
-import os
-from agent_framework.azure import AzureOpenAIChatClient
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
+from agent_framework_azure_ai import AzureAIClient
+from azure.core.credentials_async import AsyncTokenCredential
+from azure.identity.aio import DefaultAzureCredential
 
-chat_client = AzureOpenAIChatClient(api_key=os.environ.get("AZURE_OPENAI_API_KEY_GPT5"),
-                                    endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT_GPT5"),
-                                    deployment_name=os.environ.get("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"),
-                                    api_version=os.environ.get("AZURE_OPENAI_ENDPOINT_VERSION_GPT5", "2024-02-15-preview"))
+from zava_shop_agents import MCPStreamableHTTPToolOTEL, StrictModel
 
-supplier_mcp_tools = MCPStreamableHTTPToolOTEL(
-    name="SupplierMCP",
-    url=os.getenv("SUPPLIER_MCP_HTTP", "http://localhost:8001") + "/mcp",
-    headers={
-         "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN','dev-guest-token')}"
-    },
-    load_tools=True,
-    load_prompts=False,
-    request_timeout=30,
-)
+DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
 
-finance_mcp = MCPStreamableHTTPToolOTEL(
-    name="FinanceMCP",
-    url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
-    headers={
-         "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN','dev-guest-token')}"
-    },
-    load_tools=True,
-    load_prompts=False,
-    request_timeout=30,
-)
 
-class CompetitiveResult(BaseModel):
+class CompetitiveResult(StrictModel):
     is_competitive: bool
+
 
 def is_competitive():
     def condition(message: Any) -> bool:
@@ -57,17 +39,23 @@ def is_competitive():
 
     return condition
 
+
 class DispatchToExperts(Executor):
     """Dispatches the incoming prompt to all expert agent executors (fan-out)."""
+
+    _expert_ids: list[str]
 
     def __init__(self, expert_ids: list[str], id: str | None = None):
         super().__init__(id=id or "dispatch_to_experts")
         self._expert_ids = expert_ids
 
     @handler
-    async def dispatch(self, prompt: str, ctx: WorkflowContext[AgentExecutorRequest]) -> None:
+    async def dispatch(self, prompt: str | ChatMessage, ctx: WorkflowContext[AgentExecutorRequest]) -> None:
         # Wrap the incoming prompt as a user message for each expert and request a response.
-        initial_message = ChatMessage(Role.USER, text=prompt)
+        if isinstance(prompt, str):
+            initial_message = ChatMessage(Role.USER, text=prompt)
+        else:
+            initial_message = prompt
         for expert_id in self._expert_ids:
             await ctx.send_message(
                 AgentExecutorRequest(messages=[initial_message], should_respond=True),
@@ -102,16 +90,38 @@ LEGAL_COMPLIANCE_EXPERT_ID = "Legal/Compliance Researcher"
 COMMERCIAL_EXPERT_ID = "Commercial Researcher"
 PROCUREMENT_EXPERT_ID = "Procurement Researcher"
 
+WORKFLOW_AGENT_DESCRIPTION = "Supplier Review Workflow Agent"
 
 class AggregateInsights(Executor):
     """Aggregates expert agent responses into a single consolidated result (fan-in)."""
 
-    def __init__(self, expert_ids: list[str], id: str | None = None):
-        super().__init__(id=id or "aggregate_insights")
+    agent: ChatAgent
+
+    def __init__(
+        self,
+        expert_ids: list[str],
+        client: AzureAIClient,
+        tools: ToolProtocol | Sequence[ToolProtocol],
+        agent_suffix: str = "",
+    ):
+        _id = "aggregate-insights-agent" + agent_suffix
         self._expert_ids = expert_ids
 
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
+            instructions="You are an expert evaluator. Given the consolidated insights, determine if the proposal is competitive or not competitive.",
+            model_id=DEFAULT_MODEL,
+            tools=tools,
+            tool_choice="required",
+            store=True,
+        )
+        super().__init__(id=_id)
+
     @handler
-    async def aggregate(self, results: list[AgentExecutorResponse], ctx: WorkflowContext[AggregateInsightsResult]) -> None:
+    async def aggregate(
+        self, results: list[AgentExecutorResponse], ctx: WorkflowContext[AggregateInsightsResult]
+    ) -> None:
         # Map responses to text by executor id for a simple, predictable demo.
         by_id: dict[str, str] = {}
         for r in results:
@@ -137,103 +147,187 @@ class AggregateInsights(Executor):
             f"Procurement Notes:\n{aggregated.procurement}\n"
         )
 
-        chat_client_agent = chat_client.create_agent(
-            instructions=(
-                "You are an expert evaluator. Given the consolidated insights, determine if the proposal is competitive or not competitive."
-            ),
-            tools=[supplier_mcp_tools],
-        )
-        response = await chat_client_agent.run(consolidated, response_format=CompetitiveResult)
-
-        result = AggregateInsightsResult(is_competitive=response.value.is_competitive, aggregated_insights=aggregated)
+        response = await self.agent.run(consolidated, response_format=CompetitiveResult)
+        value = cast(CompetitiveResult, response.value)
+        result = AggregateInsightsResult(is_competitive=value.is_competitive, aggregated_insights=aggregated)
 
         await ctx.send_message(result)
 
-compliance = AgentExecutor(
-    chat_client.create_agent(
-        instructions=(
-            "You're an expert legal and compliance researcher. You review a proposal and provide feedback on behalf of Zava stores." \
-            "Use the provided tools to find out information about other suppliers' ESG and compliance status."
-        ),
-        tools=[supplier_mcp_tools],
-    ),
-    id=LEGAL_COMPLIANCE_EXPERT_ID,
-)
-commercial = AgentExecutor(
-    chat_client.create_agent(
-        instructions=(
-            "You are an expert commercial analyst. Evaluate supplier proposals for market competitiveness and value." \
-            "Use the supplied tools to understand our existing stock levels, prices and demand."
-        ),
-        tools=[finance_mcp],
-    ),
-    id=COMMERCIAL_EXPERT_ID,
-)
-procurement = AgentExecutor(
-    chat_client.create_agent(
-        instructions=(
-            "You are an expert procurement analyst. Analyze supplier proposals for cost-effectiveness and strategic fit."
-            "Use the supplied tools to check existing supplier contracts and performance."
-        ),
-        tools=[supplier_mcp_tools],
-    ),
-    id=PROCUREMENT_EXPERT_ID,
-)
-
-expert_ids = [compliance.id, commercial.id, procurement.id]
-
-dispatcher = DispatchToExperts(expert_ids=expert_ids, id="Proposal Dispatcher")
-aggregator = AggregateInsights(expert_ids=expert_ids, id="Competitive Analysis Aggregator")
-
 
 class NegotiatorSummarizerExecutor(Executor):
-    @handler
-    async def handle(self, request: AggregateInsightsResult, ctx: WorkflowContext[Never, str]) -> AgentExecutorResponse:
-        chat_client_agent = chat_client.create_agent(
+    agent: ChatAgent
+
+    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+        _id = "negotiator-summarizer" + agent_suffix
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
-                "You are a skilled negotiator. Given that the proposal is competitive, draft a negotiation strategy and summarize key points." \
+                "You are a skilled negotiator. Given that the proposal is competitive, draft a negotiation strategy and summarize key points."
                 "Consult with existing suppliers from the tools provided if needed to optimize terms."
             ),
-            tools=[supplier_mcp_tools],
+            model_id=DEFAULT_MODEL,
+            tools=tools,
+            tool_choice="required",
+            store=True,
         )
-        response = await chat_client_agent.run(str(request))
+        super().__init__(id=_id)
+
+    @handler
+    async def handle(self, request: AggregateInsightsResult, ctx: WorkflowContext[Never, str]) -> None:
+        response = await self.agent.run(str(request))
 
         await ctx.yield_output(response.text)
 
 
 class ReviewAndDismissExecutor(Executor):
-    @handler
-    async def handle(self, request: AggregateInsightsResult, ctx: WorkflowContext[Never, str]) -> AgentExecutorResponse:
-        chat_client_agent = chat_client.create_agent(
+    agent: ChatAgent
+
+    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+        _id = "review-and-dismiss" + agent_suffix
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You have been asked to review a supplier proposal that is not competitive. Provide a summary of the reasons and suggest dismissal points."
             ),
-            tools=[supplier_mcp_tools],
+            model_id=DEFAULT_MODEL,
+            tools=tools,
+            tool_choice="required",
+            store=True,
         )
-        response = await chat_client_agent.run(str(request))
+        super().__init__(id=_id)
+
+    @handler
+    async def handle(self, request: AggregateInsightsResult, ctx: WorkflowContext[Never, str]) -> None:
+        response = await self.agent.run(str(request))
 
         await ctx.yield_output(response.text)
 
 
-negotiator = NegotiatorSummarizerExecutor(
-    id="Negotiator & Summarizer",
-)
+def build_workflow(
+    credential: AsyncTokenCredential | None = None,
+    project_endpoint: str | None = None,
+    tools: Sequence[ToolProtocol] | None = None,
+    agent_suffix: str = "",
+) -> Workflow:
+    if credential is None:
+        credential = DefaultAzureCredential(
+            exclude_shared_token_cache_credential=True,
+            exclude_visual_studio_code_credential=True,
+        )
+    project_endpoint = project_endpoint or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
 
-review_and_dismiss = ReviewAndDismissExecutor(
-    id="Review & Dismiss",
-)
+    if tools is None:
+        tools = [
+            MCPStreamableHTTPToolOTEL(
+                name="SupplierMCP",
+                url=os.getenv("SUPPLIER_MCP_HTTP", "http://localhost:8001") + "/mcp",
+                headers={"Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"},
+                load_tools=True,
+                load_prompts=False,
+                request_timeout=30,
+            ),
+            MCPStreamableHTTPToolOTEL(
+                name="FinanceMCP",
+                url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
+                headers={"Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"},
+                load_tools=True,
+                load_prompts=False,
+                request_timeout=30,
+            ),
+        ]
 
-workflow = (
-    WorkflowBuilder(name="Supplier Review Workflow")
-    .set_start_executor(dispatcher)
-    .add_fan_out_edges(dispatcher, [compliance, commercial, procurement])
-    .add_fan_in_edges([compliance, commercial, procurement], aggregator)
-    .add_switch_case_edge_group(
+    compliance = AgentExecutor(
+        AzureAIClient(
+            credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
+        ).create_agent(
+            name='legal-compliance-researcher' + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
+            instructions=(
+                "You're an expert legal and compliance researcher. You review a proposal and provide feedback on behalf of Zava stores."
+                "Use the provided tools to find out information about other suppliers' ESG and compliance status."
+            ),
+            model_id=DEFAULT_MODEL,
+            tools=tools,
+        ),
+        id=LEGAL_COMPLIANCE_EXPERT_ID,
+    )
+    commercial = AgentExecutor(
+        AzureAIClient(
+            credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
+        ).create_agent(
+            name='commercial-researcher' + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
+            instructions=(
+                "You are an expert commercial analyst. Evaluate supplier proposals for market competitiveness and value."
+                "Use the supplied tools to understand our existing stock levels, prices and demand."
+            ),
+            model_id=DEFAULT_MODEL,
+            tools=tools,
+        ),
+        id=COMMERCIAL_EXPERT_ID,
+    )
+    procurement = AgentExecutor(
+        AzureAIClient(
+            credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
+        ).create_agent(
+            name='procurement-researcher' + agent_suffix,
+            description=WORKFLOW_AGENT_DESCRIPTION,
+            instructions=(
+                "You are an expert procurement analyst. Analyze supplier proposals for cost-effectiveness and strategic fit."
+                "Use the supplied tools to check existing supplier contracts and performance."
+            ),
+            model_id=DEFAULT_MODEL,
+            tools=tools,
+        ),
+        id=PROCUREMENT_EXPERT_ID,
+    )
+
+    negotiator = NegotiatorSummarizerExecutor(
+        agent_suffix=agent_suffix,
+        client=AzureAIClient(
+            credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
+        ),
+        tools=tools,
+    )
+
+    review_and_dismiss = ReviewAndDismissExecutor(
+        agent_suffix=agent_suffix,
+        client=AzureAIClient(
+            credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
+        ),
+        tools=tools,
+    )
+
+    expert_ids = [compliance.id, commercial.id, procurement.id]
+
+    dispatcher = DispatchToExperts(expert_ids=expert_ids, id="proposal-dispatcher" + agent_suffix)
+    aggregator = AggregateInsights(
+        expert_ids=expert_ids,
+        client=AzureAIClient(
+            credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
+        ),
+        tools=tools,
+        agent_suffix=agent_suffix,
+    )
+
+    workflow = (
+        WorkflowBuilder(
+            name="Supplier Review Workflow",
+            description="Workflow to review supplier proposals and determine competitiveness.",
+        )
+        .set_start_executor(dispatcher)
+        .add_fan_out_edges(dispatcher, [compliance, commercial, procurement])
+        .add_fan_in_edges([compliance, commercial, procurement], aggregator)
+        .add_switch_case_edge_group(
             aggregator,
             [
                 Case(condition=is_competitive(), target=negotiator),
                 Default(target=review_and_dismiss),
             ],
         )
-    .build()
-)
+        .build()
+    )
+
+    return workflow

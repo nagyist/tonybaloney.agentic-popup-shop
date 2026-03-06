@@ -3,31 +3,37 @@
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import List, Optional, Sequence, Union, cast
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import Field
 from agent_framework import (
     ChatAgent,
-    ChatMessage,
     Executor,
+    ToolProtocol,
+    Workflow,
     WorkflowBuilder,
     WorkflowContext,
     WorkflowEvent,
     handler,
     HostedWebSearchTool,
 )
-from agent_framework.azure import AzureOpenAIChatClient
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
-from zava_shop_agents import MCPStreamableHTTPToolOTEL
+from azure.core.credentials_async import AsyncTokenCredential
 
+from zava_shop_agents import MCPStreamableHTTPToolOTEL, StrictModel
 
 logger = logging.getLogger(__name__)
 
 
+WORKFLOW_AGENT_DESCRIPTION = "Weekly Store Insights Workflow Agent"
+DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
+
+
 class WeatherAnalysisEvent(WorkflowEvent):
     """Event emitted when weather analysis is complete."""
+    executor_id: Optional[str] = None
 
     def __init__(self, weather_data: "WeatherAnalysis"):
         super().__init__(
@@ -38,6 +44,7 @@ class WeatherAnalysisEvent(WorkflowEvent):
 
 class EventsAnalysisEvent(WorkflowEvent):
     """Event emitted when events analysis is complete."""
+    executor_id: Optional[str] = None
 
     def __init__(self, event_data: "EventsAnalysis"):
         super().__init__(
@@ -48,6 +55,7 @@ class EventsAnalysisEvent(WorkflowEvent):
 
 class ProductAnalysisEvent(WorkflowEvent):
     """Event emitted when product analysis is complete."""
+    executor_id: Optional[str] = None
 
     def __init__(self, product_data: "ProductsAnalysis"):
         super().__init__(
@@ -58,6 +66,7 @@ class ProductAnalysisEvent(WorkflowEvent):
 
 class InsightsSynthesizedEvent(WorkflowEvent):
     """Event emitted when final insights are synthesized."""
+    executor_id: Optional[str] = None
 
     def __init__(self, insights: "WeeklyInsights"):
         super().__init__("Weekly insights generated successfully")
@@ -66,39 +75,7 @@ class InsightsSynthesizedEvent(WorkflowEvent):
 
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_API_TIMEOUT = 10.0
-DEFAULT_AZURE_API_VERSION = "2024-02-15-preview"
 
-chat_client = AzureOpenAIChatClient(
-    api_key=os.environ.get("AZURE_OPENAI_API_KEY_GPT5"),
-    endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT_GPT5"),
-    deployment_name=os.environ.get("AZURE_OPENAI_MODEL_DEPLOYMENT_NAME_GPT5"),
-    api_version=os.environ.get(
-        "AZURE_OPENAI_ENDPOINT_VERSION_GPT5", DEFAULT_AZURE_API_VERSION
-    ),
-)
-
-azure_ai_client = AzureAIAgentClient(
-    async_credential=DefaultAzureCredential(
-        exclude_shared_token_cache_credential=True,
-        exclude_visual_studio_code_credential=True,
-    ),
-    project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
-    model_deployment_name=os.environ.get(
-        "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
-    ),
-)
-
-# Finance MCP Server tool
-finance_mcp = MCPStreamableHTTPToolOTEL(
-    name="FinanceMCP",
-    url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
-    headers={
-        "Authorization": f"Bearer {os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')}"
-    },
-    load_tools=True,
-    load_prompts=False,
-    request_timeout=30,
-)
 
 STORE_COORDINATES = {
     1: {"lat": 40.7580, "lon": -73.9855, "city": "New York", "state": "NY"},
@@ -140,7 +117,7 @@ STORE_COORDINATES = {
 }
 
 
-class StoreContext(BaseModel):
+class StoreContext(StrictModel):
     """Store information used to initialize the insights workflow.
 
     Contains geographic coordinates for weather lookups and identification
@@ -156,7 +133,7 @@ class StoreContext(BaseModel):
     state: str
 
 
-class InsightAction(BaseModel):
+class InsightAction(StrictModel):
     """Defines a clickable action button displayed on insight cards in the UI.
 
     Used to navigate users to the AI agent interface with pre-loaded context
@@ -176,7 +153,7 @@ class InsightAction(BaseModel):
     )
 
 
-class Insight(BaseModel):
+class Insight(StrictModel):
     """Represents a single insight card displayed in the management dashboard.
 
     Each analyzer (weather, events, products) generates one Insight that's
@@ -194,7 +171,7 @@ class Insight(BaseModel):
     )
 
 
-class WeatherAgentResponse(BaseModel):
+class WeatherAgentResponse(StrictModel):
     """Structured output schema for the weather analysis LLM agent.
 
     Forces the agent to return a concise, actionable recommendation about
@@ -213,7 +190,7 @@ class WeatherAgentResponse(BaseModel):
     )
 
 
-class WeatherAnalysis(BaseModel):
+class WeatherAnalysis(StrictModel):
     """Output from WeatherAnalyzer sent to InsightSynthesizer.
 
     Contains both the raw weather analysis text and a UI-ready Insight
@@ -230,7 +207,7 @@ class WeatherAnalysis(BaseModel):
     )
 
 
-class EventDetail(BaseModel):
+class EventDetail(StrictModel):
     """Represents a single upcoming event that could impact sales.
 
     Part of structured output from EventsSearchAgent (Bing search).
@@ -251,12 +228,12 @@ class EventDetail(BaseModel):
         description="Why this event is relevant for retail - brief explanation",
     )
     product_categories: List[str] = Field(
-        default_factory=list,
+        ...,
         description="Product categories that would be in high demand (e.g., 'Athletic Wear', 'Outerwear', 'Accessories')",
     )
 
 
-class EventsAgentResponse(BaseModel):
+class EventsAgentResponse(StrictModel):
     """Structured output schema for EventsSearchAgent LLM (Azure AI + Bing).
 
     Forces the agent to return events in a consistent format with summary.
@@ -264,7 +241,7 @@ class EventsAgentResponse(BaseModel):
     """
 
     events: List[EventDetail] = Field(
-        default_factory=list,
+        ...,
         description="List of 1-3 major upcoming events in the next 21 days with expected attendance over 5000 people",
     )
     summary: str = Field(
@@ -277,7 +254,7 @@ class EventsAgentResponse(BaseModel):
     )
 
 
-class EventsAnalysis(BaseModel):
+class EventsAnalysis(StrictModel):
     """Output from EventsAnalyzer sent to InsightSynthesizer.
 
     Contains structured list of events found via Bing search, summary text,
@@ -288,7 +265,7 @@ class EventsAnalysis(BaseModel):
     city: str
     state: str
     events: List[EventDetail] = Field(
-        default_factory=list, description="List of relevant upcoming events"
+        ..., description="List of relevant upcoming events"
     )
     summary: str = Field(
         ..., description="Overall summary of events happening in the area"
@@ -298,7 +275,7 @@ class EventsAnalysis(BaseModel):
     )
 
 
-class ProductsAnalysis(BaseModel):
+class ProductsAnalysis(StrictModel):
     """Output from TopSellingProductsAnalyzer sent to InsightSynthesizer.
 
     Contains top 5 products retrieved via Finance MCP server tools, formatted
@@ -313,15 +290,15 @@ class ProductsAnalysis(BaseModel):
         ...,
         description="Formatted analysis from MCP tools including inventory levels and sales performance",
     )
-    low_stock_items: List[str] = Field(
+    low_stock_items: Optional[list[str]] = Field(
         default_factory=list,
         description="List of low stock items with quantities",
     )
-    top_products: List[str] = Field(
+    top_products: Optional[List[str]] = Field(
         default_factory=list,
         description="List of top performing products with order counts",
     )
-    recommendations: List[str] = Field(
+    recommendations: Optional[List[str]] = Field(
         default_factory=list, description="Stock recommendations based on data"
     )
     insight: Insight = Field(
@@ -329,7 +306,7 @@ class ProductsAnalysis(BaseModel):
     )
 
 
-class ProductDetail(BaseModel):
+class ProductDetail(StrictModel):
     """Represents sales data for a single product over a time period.
 
     Returned by Finance MCP server tools. Contains product identification
@@ -350,7 +327,7 @@ class ProductDetail(BaseModel):
     )
 
 
-class ProductsAgentResponse(BaseModel):
+class ProductsAgentResponse(StrictModel):
     """Structured output schema for Top Selling Products Analyzer agent.
 
     Forces the agent to return product data in consistent format after
@@ -358,7 +335,7 @@ class ProductsAgentResponse(BaseModel):
     """
 
     products: List[ProductDetail] = Field(
-        default_factory=list,
+        ...,
         description=(
             "Top 5 selling products from the last 21 days, ordered by "
             "units sold descending. Each product must include product_name, "
@@ -367,7 +344,7 @@ class ProductsAgentResponse(BaseModel):
     )
 
 
-class WeeklyInsights(BaseModel):
+class WeeklyInsights(StrictModel):
     """Final workflow output returned to the management dashboard UI.
 
     Aggregates all three insights (weather, events, products) plus a
@@ -386,7 +363,7 @@ class WeeklyInsights(BaseModel):
         None, description="Summary of local events"
     )
     stock_items: List[str] = Field(
-        default_factory=list,
+        ...,
         description="List of specific product items to stock up on (determined by stock agent)",
     )
     insights: List[Insight] = Field(
@@ -398,6 +375,11 @@ class WeeklyInsights(BaseModel):
     )
 
 
+class DataCollectionParameters(StrictModel):
+    store_id: int
+    user_role: str
+
+
 class DataCollector(Executor):
     """Collects store context and sends to all parallel analyzers (fan-out).
 
@@ -407,76 +389,26 @@ class DataCollector(Executor):
     """
 
     def __init__(self, id: str | None = None):
-        super().__init__(id=id or "data_collector")
+        super().__init__(id=id or "data-collector")
 
     @handler
     async def handle(
-        self, message: ChatMessage, ctx: WorkflowContext[StoreContext]
+        self, parameters: DataCollectionParameters, ctx: WorkflowContext[StoreContext]
     ) -> None:
-        """Extract store context from input message and broadcast to analyzers.
+        """Extract store context from input message and broadcast to analyzers."""
+        # Lookup coordinates, default to NYC (store 1) if not found
+        coords = STORE_COORDINATES.get(parameters.store_id, STORE_COORDINATES[1])
 
-        Parses store details from natural language input using simple text parsing,
-        then enriches with geographic coordinates and broadcasts to
-        weather, events, and products analyzers.
+        store_context = StoreContext(
+            store_id=parameters.store_id,
+            user_role=parameters.user_role,
+            latitude=coords["lat"],
+            longitude=coords["lon"],
+            city=coords["city"],
+            state=coords["state"],
+        )
 
-        Args:
-            message: ChatMessage containing store details in natural language format like:
-                    "Generate weekly insights for:\nStore ID: 1\nUser Role: store_manager"
-            ctx: Workflow context for broadcasting StoreContext
-
-        Raises:
-            ValueError: If unable to extract required store information
-        """
-        import re
-        
-        text = message.text.strip()
-        store_id = None
-        user_role = None
-
-        try:
-            # Extract store_id using regex patterns
-            # Pattern: "Store ID: 1" or "store_id: 1" (case-insensitive)
-            store_id_match = re.search(r'store[_ ]id\s*:\s*(\d+)', text, re.IGNORECASE)
-            if store_id_match:
-                store_id = int(store_id_match.group(1))
-
-            # Extract user_role using regex patterns  
-            # Pattern: "User Role: store_manager" or "user_role: store_manager" (case-insensitive)
-            role_match = re.search(r'user[_ ]role\s*:\s*([a-z_]+)', text, re.IGNORECASE)
-            if role_match:
-                user_role = role_match.group(1)
-
-            # Validate we got both required fields
-            if store_id is None or user_role is None:
-                raise ValueError(
-                    f"Could not parse store_id and user_role from message. "
-                    f"Expected format: 'Store ID: <number>\\nUser Role: <role>'. "
-                    f"Got: {text}"
-                )
-
-            # Lookup coordinates, default to NYC (store 1) if not found
-            coords = STORE_COORDINATES.get(store_id, STORE_COORDINATES[1])
-
-            store_context = StoreContext(
-                store_id=store_id,
-                user_role=user_role,
-                latitude=coords["lat"],
-                longitude=coords["lon"],
-                city=coords["city"],
-                state=coords["state"],
-            )
-
-            await ctx.send_message(store_context)
-
-        except Exception as e:
-            logger.error(
-                "Failed to parse store context: %s", str(e), exc_info=True
-            )
-            raise ValueError(
-                f"Failed to extract store information from message. "
-                f"Expected format: 'Store ID: <number>\\nUser Role: <role>'. "
-                f"Got: {message.text}"
-            ) from e
+        await ctx.send_message(store_context)
 
 
 class WeatherAnalyzer(Executor):
@@ -487,9 +419,11 @@ class WeatherAnalyzer(Executor):
     with both raw text and UI-ready Insight for the synthesizer.
     """
 
-    def __init__(self, id: str | None = None):
-        super().__init__(id=id or "weather_analyzer")
-        self._weather_agent = chat_client.create_agent(
+    def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
+        _id = "weather-analyzer" + agent_suffix
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You analyze the next 7 days of weather to guide apparel stocking. "
                 "Respond in a single sentence using this structure: "
@@ -499,6 +433,7 @@ class WeatherAnalyzer(Executor):
             ),
             response_format=WeatherAgentResponse,
         )
+        super().__init__(id=_id)
 
     @handler
     async def handle(
@@ -539,7 +474,7 @@ class WeatherAnalyzer(Executor):
                 f" {weather_api_data}"
             )
 
-            llm_response = await self._weather_agent.run(weather_prompt)
+            llm_response = await self.agent.run(weather_prompt)
             weather_payload = getattr(llm_response, "value", None)
 
             if weather_payload and getattr(weather_payload, "analysis", None):
@@ -615,10 +550,11 @@ class WeatherAnalyzer(Executor):
 class EventsAnalyzer(Executor):
     """Uses Bing search to find local events and generate insights."""
 
-    def __init__(self, id: str | None = None):
-        super().__init__(id=id or "events_analyzer")
-        self._events_agent = azure_ai_client.create_agent(
-            name="EventsSearchAgent",
+    def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
+        _id = "events-analyzer" + agent_suffix
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are helping a retail clothing store manager identify upcoming events that could increase apparel sales. "
                 "Search for major public events in the next 21 days (parades, marathons, outdoor festivals, "
@@ -635,6 +571,7 @@ class EventsAnalyzer(Executor):
             ),
             tools=[HostedWebSearchTool(description="Search for local events")],
         )
+        super().__init__(id=_id)
 
     @handler
     async def handle(
@@ -651,14 +588,14 @@ class EventsAnalyzer(Executor):
                 )
 
             today = datetime.now().strftime("%B %d, %Y")
-            response = await self._events_agent.run(
+            response = await self.agent.run(
                 f"Major outdoor public events after {today} in {context.city}, "
                 f"{context.state} that would increase clothing store sales",
                 response_format=EventsAgentResponse,
             )
 
             # Structured output guarantees schema compliance
-            events_payload = response.value
+            events_payload = cast(EventsAgentResponse, response.value)
             structured_events = (
                 [EventDetail.model_validate(event) for event in events_payload.events]
                 if events_payload and events_payload.events
@@ -738,10 +675,12 @@ class TopSellingProductsAnalyzer(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, id: str | None = None):
+    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
         # Create an agent with Finance MCP tools
-        self.agent = chat_client.create_agent(
-            name="Top Selling Products Analyzer",
+        _id = "top-selling-products-analyzer" + agent_suffix
+        self.agent = client.create_agent(
+            name=_id,
+            description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
                 "You are a retail analyst analyzing product performance. "
                 "Your task: retrieve the top 5 selling products for a specific store over the last 21 days. "
@@ -749,9 +688,9 @@ class TopSellingProductsAnalyzer(Executor):
                 "Limit results to exactly 5 products and order by units sold in descending order. "
                 "Always respond using the provided response schema."
             ),
-            tools=[finance_mcp],
+            tools=tools,
         )
-        super().__init__(id=id or "top_selling_products_analyzer")
+        super().__init__(id=_id)
 
     @handler
     async def handle(
@@ -766,7 +705,7 @@ class TopSellingProductsAnalyzer(Executor):
                 response_format=ProductsAgentResponse,
             )
 
-            products_payload = agent_response.value
+            products_payload = cast(ProductsAgentResponse, agent_response.value)
             products = (products_payload.products if products_payload else [])[
                 :5
             ]
@@ -856,13 +795,13 @@ class InsightSynthesizer(Executor):
     """Aggregates weather, product, and events data to generate final insights (fan-in)."""
 
     def __init__(self, id: str | None = None):
-        super().__init__(id=id or "insight_synthesizer")
+        super().__init__(id=id or "insight-synthesizer")
 
     @handler
     async def handle(
         self,
         data: List[Union[WeatherAnalysis, EventsAnalysis, ProductsAnalysis]],
-        ctx: WorkflowContext[WeeklyInsights],
+        ctx: WorkflowContext[WeeklyInsights, WeeklyInsights],
     ) -> None:
         """Collect aggregated data from fan-in and synthesize insights."""
         weather_data: Optional[WeatherAnalysis] = None
@@ -884,7 +823,7 @@ class InsightSynthesizer(Executor):
         weather_data: Optional[WeatherAnalysis],
         event_data: Optional[EventsAnalysis],
         product_data: Optional[ProductsAnalysis],
-        ctx: WorkflowContext[WeeklyInsights],
+        ctx: WorkflowContext[WeeklyInsights, WeeklyInsights],
     ) -> None:
         """Generate final insights when all data is available."""
         if weather_data is None or event_data is None or product_data is None:
@@ -950,7 +889,13 @@ class InsightSynthesizer(Executor):
         await ctx.yield_output(insights)
 
 
-def get_workflow():
+def build_workflow(
+    credential: AsyncTokenCredential | None = None,
+    project_endpoint: str | None = None,
+    tools: Sequence[ToolProtocol] | None = None,
+    agent_suffix: str = "",
+    user_token: str | None = None,
+) -> Workflow:
     """Create and return the weekly insights workflow.
 
     Fan-out/fan-in pattern: collects store context, analyzes weather/events/products
@@ -959,13 +904,44 @@ def get_workflow():
     Returns:
         Workflow: Configured workflow ready for execution
     """
-    data_collector = DataCollector(id="data_collector")
-    weather_analyzer = WeatherAnalyzer(id="weather_analyzer")
-    events_analyzer = EventsAnalyzer(id="events_analyzer")
-    top_selling_products_analyzer = TopSellingProductsAnalyzer(
-        id="top_selling_products_analyzer"
+
+    if credential is None:
+        credential = DefaultAzureCredential(
+            exclude_shared_token_cache_credential=True,
+            exclude_visual_studio_code_credential=True,
+        )
+    project_endpoint = project_endpoint or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
+
+    # Finance MCP Server tool
+    if not tools:
+        # Use user token if provided, otherwise fall back to DEV_GUEST_TOKEN for local dev
+        auth_token = user_token or os.getenv('DEV_GUEST_TOKEN', 'dev-guest-token')
+        tools = [MCPStreamableHTTPToolOTEL(
+            name="FinanceMCP",
+            url=os.getenv("FINANCE_MCP_HTTP", "http://localhost:8002") + "/mcp",
+            headers={
+                "Authorization": f"Bearer {auth_token}"
+            },
+            load_tools=True,
+            load_prompts=False,
+            request_timeout=30,
+        )]
+
+    data_collector = DataCollector()
+    weather_analyzer = WeatherAnalyzer(
+        AzureAIClient(credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL),
+        agent_suffix=agent_suffix,
     )
-    insight_synthesizer = InsightSynthesizer(id="insight_synthesizer")
+    events_analyzer = EventsAnalyzer(
+        AzureAIClient(credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL),
+        agent_suffix=agent_suffix,
+    )
+    top_selling_products_analyzer = TopSellingProductsAnalyzer(
+        AzureAIClient(credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL),
+        agent_suffix=agent_suffix,
+        tools=tools,
+    )
+    insight_synthesizer = InsightSynthesizer()
 
     workflow = (
         WorkflowBuilder(
@@ -988,7 +964,3 @@ def get_workflow():
     )
 
     return workflow
-
-
-workflow = get_workflow()
-

@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: agentic-popup-shop
+metadata:
+  template: agentic-popup-shop@0.0.1-beta
+workflows:
+  up: 
+    steps:
+      - azd: provision
+      - azd: deploy --all
+services:
+  web:
+    project: ./frontend
+    language: js
+    host: containerapp
+  api:
+    project: ./app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile.api
+  finance-mcp:
+    project: ./app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile.financemcp
+  supplier-mcp:
+    project: ./app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile.suppliermcp
+  

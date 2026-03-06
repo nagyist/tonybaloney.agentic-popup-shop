@@ -1,0 +1,27 @@
+# Keycloak container with pre-built themes and realm import
+# Based on: https://www.keycloak.org/server/containers
+FROM quay.io/keycloak/keycloak:26.4 AS builder
+
+# Copy the realm configuration for import
+COPY realm.json /opt/keycloak/data/import/zava-realm.json
+COPY zava-theme /opt/keycloak/themes
+
+# Build Keycloak to pre-compile themes (fixes cache hash mismatch across replicas)
+RUN /opt/keycloak/bin/kc.sh build
+
+# Production image with pre-built themes
+FROM quay.io/keycloak/keycloak:26.4
+
+# Copy built Keycloak with consistent theme cache hashes
+COPY --from=builder /opt/keycloak/ /opt/keycloak/
+
+# Expose port 8080
+EXPOSE 8080
+
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
+
+# Start in dev mode with H2 database (still uses pre-built themes)
+# --proxy-headers=xforwarded tells Keycloak it's behind a reverse proxy that sets X-Forwarded-* headers
+# --hostname-strict=false allows dynamic hostname resolution from proxy headers
+# --import-realm imports the MCP realm on startup
+CMD ["start-dev", "--features=quick-theme", "--http-port=8080", "--proxy-headers=xforwarded", "--hostname-strict=false", "--import-realm", "--health-enabled=true"]

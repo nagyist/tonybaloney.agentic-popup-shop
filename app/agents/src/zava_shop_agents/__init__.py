@@ -6,6 +6,8 @@ from agent_framework import (
 )
 import asyncio
 
+from pydantic import BaseModel, ConfigDict
+
 
 class MCPStreamableHTTPToolOTEL(MCPStreamableHTTPTool):
     def get_mcp_client(self) -> _AsyncGeneratorContextManager[Any, None]:
@@ -20,3 +22,10 @@ def get_or_create_eventloop():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop
+
+
+
+class StrictModel(BaseModel):
+    """Base model with strict validation that rejects extra fields."""
+
+    model_config = ConfigDict(extra="forbid")

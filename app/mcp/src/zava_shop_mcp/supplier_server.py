@@ -10,6 +10,7 @@ This MCP server provides tools to support a Supplier Agent with the following ca
 
 Uses pre-written SQL queries from supplier_sqlite.py for all database operations.
 """
+from zava_shop_mcp.keycloak_provider import KeycloakAuthProvider
 
 from opentelemetry.instrumentation.auto_instrumentation import initialize
 initialize()
@@ -18,7 +19,7 @@ from fastmcp.server.auth import AccessToken
 from fastmcp import FastMCP
 from zava_shop_shared.supplier_sqlite import SupplierSQLiteProvider
 from pydantic import Field
-from typing import Annotated, AsyncIterator, Optional
+from typing import Annotated, AsyncIterator
 import os
 from datetime import datetime, timezone, timedelta
 import logging
@@ -36,7 +37,7 @@ from zava_shop_shared.models.sqlite import (
     Product,
     Category,
 )
-from zava_shop_mcp.models import (
+from zava_shop_shared.models.results import (
     CompanySupplierPolicyResult,
     FindSuppliersResult,
     SupplierContractResult,
@@ -45,8 +46,6 @@ from zava_shop_mcp.models import (
 from opentelemetry.instrumentation.mcp import McpInstrumentor
 McpInstrumentor().instrument()
 
-
-GUEST_TOKEN = os.getenv("DEV_GUEST_TOKEN", "dev-guest-token")
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +56,6 @@ class LoggingStaticTokenVerifier(StaticTokenVerifier):
             logger.warning("Could not verify token: %s******%s", token[0:1], token[-2:])
         return result
 
-verifier = LoggingStaticTokenVerifier(
-    tokens={
-        GUEST_TOKEN: {
-            "client_id": "guest-user",
-            "scopes": ["read:data"]
-        }
-    },
-    required_scopes=["read:data"]
-)
-
 db: SupplierSQLiteProvider = SupplierSQLiteProvider()
 
 @asynccontextmanager
@@ -74,8 +63,19 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator:
     yield
     await db.close_engine()
 
+KEYCLOAK_REALM_URL = os.environ["KEYCLOAK_REALM_URL"]
+keycloak_base_url = os.environ["KEYCLOAK_MCP_SERVER_BASE_URL"]
+keycloak_audience = os.getenv("KEYCLOAK_MCP_SERVER_AUDIENCE") or "mcp-server"
+
+auth = KeycloakAuthProvider(
+    realm_url=KEYCLOAK_REALM_URL,
+    base_url=keycloak_base_url,
+    required_scopes=["openid", "zava:access"],
+    audience=keycloak_audience,
+)
+
 # Create MCP server with lifespan support
-mcp = FastMCP("mcp-zava-supplier", auth=verifier, lifespan=app_lifespan)
+mcp = FastMCP("mcp-zava-supplier", auth=auth, lifespan=app_lifespan)
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> Response:
@@ -544,6 +544,5 @@ if __name__ == "__main__":
         host,
         port,
     )
-    logger.info("Guest token is '%s******%s'", GUEST_TOKEN[0:1], GUEST_TOKEN[-2:])
 
     mcp.run(transport="http", host=host, port=port, path="/mcp", stateless_http=True)

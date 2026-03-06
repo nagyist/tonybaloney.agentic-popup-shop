@@ -1,6 +1,7 @@
 data/.DS_Store
 .DS_Store
 .env
+**/.venv
 
 # .NET Core
 bin/
@@ -348,3 +349,4 @@ FodyWeavers.xsd
 resources.txt
 *.egg-info/
 verify_query.py
+.idea/

@@ -1,5 +1,4 @@
 FROM python:3.12-slim
-ENV APPLICATIONINSIGHTS_CONNECTION_STRING=""
 
 # Set working directory
 WORKDIR /app

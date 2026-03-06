@@ -13,12 +13,14 @@ dependencies = [
 
     # Chatkit
     "openai-chatkit",
-    "agent-framework-chatkit==1.0.0b251112",
+    "agent-framework-chatkit==1.0.0b260116",
 
     # Azure AI preview
-    "agent-framework-azure-ai==1.0.0b251112",
+    "agent-framework-azure-ai==1.0.0b260116",
     "aiohttp",
 
+    "azure-monitor-opentelemetry",
+    "azure-monitor-opentelemetry-exporter",
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-sqlalchemy",
     "opentelemetry-exporter-otlp",
@@ -27,6 +29,8 @@ dependencies = [
     # local editable packages
     "zava-shop-shared",
     "zava-shop-agents",
+
+    "python-keycloak>=5.8.1,<6.0.0",
 ]
 
 [tool.uv.sources]
@@ -45,3 +49,10 @@ dev = [
 ]
 
 # uv run uvicorn zava_shop_api.app:app --reload
+
+
+[tool.ruff]
+line-length = 120
+ignore = [
+    "E402",
+]

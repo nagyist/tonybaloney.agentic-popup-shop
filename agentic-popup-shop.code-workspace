@@ -1,0 +1,32 @@
+{
+    "folders": [
+        {
+            "name": "agents",
+            "path": "app/agents"
+        },
+        {
+            "name": "api",
+            "path": "app/api"
+        },
+        {
+            "name": "auth",
+            "path": "auth"
+        },
+        {
+            "name": "data",
+            "path": "app/data"
+        },
+        {
+            "name": "infra",
+            "path": "infra"
+        },
+        {
+            "name": "mcp",
+            "path": "app/mcp"
+        },
+        {
+            "name": "shared",
+            "path": "app/shared"
+        }
+    ]
+}

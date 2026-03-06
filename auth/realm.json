@@ -1,0 +1,188 @@
+{
+  "realm": "zava",
+  "enabled": true,
+  "displayName": "Zava",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Zava</span></div>",
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "defaultDefaultClientScopes": [
+    "openid",
+    "zava:access"
+  ],
+  "clientScopes": [
+    {
+      "name": "openid",
+      "description": "OpenID Connect scope with MCP server audience mapper",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "zava:access",
+      "description": "Zava tools scope for accessing Zava server tools",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Access Zava tools"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-server-audience-tools",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mcp-server",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "vscode-mcp-client",
+      "name": "VS Code MCP Client",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "http://127.0.0.1/*",
+        "http://localhost/*",
+        "https://vscode.dev/redirect",
+        "https://insiders.vscode.dev/redirect"
+      ],
+      "webOrigins": [
+        "+"
+      ]
+    },
+    {
+      "clientId": "zava-api",
+      "name": "Zava API Client",
+      "enabled": true,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "h7k8m9n0o1p2q3r4s5t6u7v8w9x0y1z2",
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "stacey",
+      "enabled": true,
+      "email": "stacey@example.com",
+      "firstName": "Stacey",
+      "lastName": "Lopez",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "stacey123",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "manager1",
+      "enabled": true,
+      "email": "manager1@example.com",
+      "firstName": "Manager",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "manager123",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.services.clientregistration.policy.ClientRegistrationPolicy": [
+      {
+        "name": "Trusted Hosts",
+        "providerId": "trusted-hosts",
+        "subType": "anonymous",
+        "config": {
+          "host-sending-registration-request-must-match": [
+            "false"
+          ],
+          "client-uris-must-match": [
+            "true"
+          ],
+          "trusted-hosts": [
+            "localhost",
+            "127.0.0.1",
+            "172.17.0.1",
+            "host.docker.internal",
+            "vscode.dev",
+            "insiders.vscode.dev",
+            "code.visualstudio.com"
+          ]
+        }
+      },
+      {
+        "name": "Max Clients Limit",
+        "providerId": "max-clients",
+        "subType": "anonymous",
+        "config": {
+          "max-clients": [
+            "200"
+          ]
+        }
+      },
+      {
+        "name": "Allowed Protocol Mapper Types",
+        "providerId": "allowed-protocol-mappers",
+        "subType": "anonymous",
+        "config": {
+          "allowed-protocol-mapper-types": [
+            "oidc-usermodel-attribute-mapper",
+            "oidc-full-name-mapper",
+            "oidc-address-mapper",
+            "oidc-usermodel-property-mapper",
+            "oidc-sha256-pairwise-sub-mapper",
+            "oidc-sub-mapper",
+            "oidc-usersessionmodel-note-mapper",
+            "oidc-audience-mapper"
+          ]
+        }
+      }
+    ]
+  }
+}
