@@ -1,8 +1,14 @@
+import os
+
 from zava_shop_agents.insights import build_workflow, DataCollectionParameters
 
 import pytest
 from azure.identity.aio import DefaultAzureCredential
-from agent_framework import ExecutorCompletedEvent
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("AZURE_AI_PROJECT_ENDPOINT"),
+    reason="AZURE_AI_PROJECT_ENDPOINT is not configured for integration tests",
+)
 
 
 @pytest.fixture
@@ -17,6 +23,6 @@ async def test_simple_path(azure_credential):
     params = DataCollectionParameters(store_id=1, user_role="store manager")
     result = await workflow.run(params)
 
-    executor_completions = [event for event in result if isinstance(event, ExecutorCompletedEvent)]
+    executor_completions = [event for event in result if getattr(event, "type", None) == "executor_completed"]
     assert len(executor_completions) >= 3  # Three+ executors should complete
 

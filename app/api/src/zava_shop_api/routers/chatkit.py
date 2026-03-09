@@ -2,12 +2,13 @@
 ChatKit router for customer AI chat functionality.
 """
 
+from dataclasses import dataclass
 import logging
 import os
 from datetime import datetime
 from typing import AsyncIterator, Callable
 
-from agent_framework import ChatAgent, ai_function
+from agent_framework import Agent, tool
 from agent_framework_azure_ai import AzureAIClient
 from agent_framework_chatkit import ThreadItemConverter, stream_agent_response
 from azure.identity.aio import DefaultAzureCredential
@@ -37,6 +38,13 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/api/chatkit", tags=["chatkit"])
 
+
+@dataclass
+class AssistantAgentMetadata:
+    model: str
+    name: str
+    instructions: str
+
 # Initialize ChatKit data store (SQLite for development)
 data_store = MemoryStore()
 
@@ -59,6 +67,12 @@ class ChatKitContext(BaseModel):
     customer_id: int | None
     role: str
     user_agent: str | None
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.model_dump()
+
+    def __getitem__(self, key: str):
+        return self.model_dump()[key]
 
 
 async def stream_widget(
@@ -149,8 +163,16 @@ class ZavaShopChatKitServer(ChatKitServer):
         super().__init__(data_store, attachment_store=None)
 
         self.client = chat_client
-        self.agent = ChatAgent(
-            chat_client,
+        self.assistant_agent = AssistantAgentMetadata(
+            model="gpt-4o-mini",
+            name="Zava Shop Assistant",
+            instructions=(
+                "You are a helpful assistant for Zava Shop customers. "
+                "Provide concise answers and assist with order-related requests."
+            ),
+        )
+        self.agent = Agent(
+            client=chat_client,
             name="zava-customer-agent",
             description="AI chat assistant for Zava Shop customers",
             instructions=(
@@ -177,7 +199,7 @@ class ZavaShopChatKitServer(ChatKitServer):
 
         orders: list[OrderResponse] = []
 
-        @ai_function
+        @tool
         async def get_orders(limit: int = 5) -> dict:
             """
             You can retrieve the customer's orders by calling this function.
@@ -198,7 +220,7 @@ class ZavaShopChatKitServer(ChatKitServer):
                 return orders_response.model_dump()
 
         async for event in stream_agent_response(
-            self.agent.run_stream(agent_messages, tools=[get_orders]),
+            self.agent.run(agent_messages, tools=[get_orders], stream=True),
             thread_id=thread.id,
         ):
             yield event
@@ -240,10 +262,11 @@ async def chatkit_endpoint(request: Request, current_user: TokenData = Depends(g
 
         result = await chatkit_server.process(await request.body(), context)
 
-        if isinstance(result, StreamingResult):
+        if isinstance(result, StreamingResult) or hasattr(result, "__aiter__"):
             return StreamingResponse(result, media_type="text/event-stream")
         else:
-            return Response(content=result.json, media_type="application/json")
+            response_content = result.json if hasattr(result, "json") else result
+            return Response(content=response_content, media_type="application/json")
 
     except HTTPException:
         # Re-raise HTTP exceptions so FastAPI handles them properly

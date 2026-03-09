@@ -7,13 +7,11 @@ from agent_framework import (
     AgentExecutor,
     AgentExecutorRequest,
     AgentExecutorResponse,
+    Agent,
     Case,
-    ChatAgent,
-    ChatMessage,
     Default,
     Executor,
-    Role,
-    ToolProtocol,
+    Message,
     Workflow,
     WorkflowBuilder,
     WorkflowContext,
@@ -50,10 +48,10 @@ class DispatchToExperts(Executor):
         self._expert_ids = expert_ids
 
     @handler
-    async def dispatch(self, prompt: str | ChatMessage, ctx: WorkflowContext[AgentExecutorRequest]) -> None:
+    async def dispatch(self, prompt: str | Message, ctx: WorkflowContext[AgentExecutorRequest]) -> None:
         # Wrap the incoming prompt as a user message for each expert and request a response.
         if isinstance(prompt, str):
-            initial_message = ChatMessage(Role.USER, text=prompt)
+            initial_message = Message(role="user", contents=[prompt])
         else:
             initial_message = prompt
         for expert_id in self._expert_ids:
@@ -95,19 +93,19 @@ WORKFLOW_AGENT_DESCRIPTION = "Supplier Review Workflow Agent"
 class AggregateInsights(Executor):
     """Aggregates expert agent responses into a single consolidated result (fan-in)."""
 
-    agent: ChatAgent
+    agent: Agent
 
     def __init__(
         self,
         expert_ids: list[str],
         client: AzureAIClient,
-        tools: ToolProtocol | Sequence[ToolProtocol],
+        tools: Any | Sequence[Any],
         agent_suffix: str = "",
     ):
         _id = "aggregate-insights-agent" + agent_suffix
         self._expert_ids = expert_ids
 
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions="You are an expert evaluator. Given the consolidated insights, determine if the proposal is competitive or not competitive.",
@@ -155,11 +153,11 @@ class AggregateInsights(Executor):
 
 
 class NegotiatorSummarizerExecutor(Executor):
-    agent: ChatAgent
+    agent: Agent
 
-    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+    def __init__(self, client: AzureAIClient, tools: Any | Sequence[Any], agent_suffix: str = ""):
         _id = "negotiator-summarizer" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -181,11 +179,11 @@ class NegotiatorSummarizerExecutor(Executor):
 
 
 class ReviewAndDismissExecutor(Executor):
-    agent: ChatAgent
+    agent: Agent
 
-    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+    def __init__(self, client: AzureAIClient, tools: Any | Sequence[Any], agent_suffix: str = ""):
         _id = "review-and-dismiss" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -208,7 +206,7 @@ class ReviewAndDismissExecutor(Executor):
 def build_workflow(
     credential: AsyncTokenCredential | None = None,
     project_endpoint: str | None = None,
-    tools: Sequence[ToolProtocol] | None = None,
+    tools: Sequence[Any] | None = None,
     agent_suffix: str = "",
 ) -> Workflow:
     if credential is None:
@@ -241,7 +239,7 @@ def build_workflow(
     compliance = AgentExecutor(
         AzureAIClient(
             credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
-        ).create_agent(
+        ).as_agent(
             name='legal-compliance-researcher' + agent_suffix,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -256,7 +254,7 @@ def build_workflow(
     commercial = AgentExecutor(
         AzureAIClient(
             credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
-        ).create_agent(
+        ).as_agent(
             name='commercial-researcher' + agent_suffix,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -271,7 +269,7 @@ def build_workflow(
     procurement = AgentExecutor(
         AzureAIClient(
             credential=credential, project_endpoint=project_endpoint, model_deployment_name=DEFAULT_MODEL
-        ).create_agent(
+        ).as_agent(
             name='procurement-researcher' + agent_suffix,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -314,10 +312,10 @@ def build_workflow(
 
     workflow = (
         WorkflowBuilder(
+            start_executor=dispatcher,
             name="Supplier Review Workflow",
             description="Workflow to review supplier proposals and determine competitiveness.",
         )
-        .set_start_executor(dispatcher)
         .add_fan_out_edges(dispatcher, [compliance, commercial, procurement])
         .add_fan_in_edges([compliance, commercial, procurement], aggregator)
         .add_switch_case_edge_group(

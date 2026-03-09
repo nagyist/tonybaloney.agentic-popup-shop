@@ -2,12 +2,11 @@
 
 import logging
 import os
-from typing import List, Optional, Sequence, cast
+from typing import Any, List, Optional, Sequence, cast
 
 from agent_framework import (
-    ChatAgent,
+    Agent,
     Executor,
-    ToolProtocol,
     Workflow,
     WorkflowBuilder,
     WorkflowContext,
@@ -197,12 +196,12 @@ class AdminContextCollector(Executor):
 class StorePerformanceAnalyzer(Executor):
     """Analyzes store performance using Finance MCP get_store_performance_comparison tool."""
 
-    agent: ChatAgent
+    agent: Agent
 
-    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+    def __init__(self, client: AzureAIClient, tools: Any | Sequence[Any], agent_suffix: str = ""):
         _id = "store-performance-analyzer" + agent_suffix
         # Create agent with Finance MCP tools - agent handles connection automatically
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -215,7 +214,7 @@ class StorePerformanceAnalyzer(Executor):
             ),
             tools=tools,
         )
-        self.analysis_agent = client.create_agent(
+        self.analysis_agent = client.as_agent(
             name="store-performance-analyzer-summarizer" + agent_suffix,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions="Provide concise executive insights from store performance data."
@@ -420,7 +419,7 @@ class AdminInsightSynthesizer(Executor):
 def build_workflow(
     credential: AsyncTokenCredential | None = None,
     project_endpoint: str | None = None,
-    tools: Sequence[ToolProtocol] | None = None,
+    tools: Sequence[Any] | None = None,
     agent_suffix: str = "",
     user_token: str | None = None,
 ) -> Workflow:
@@ -467,6 +466,7 @@ def build_workflow(
 
     workflow = (
         WorkflowBuilder(
+            start_executor=context_collector,
             name="Admin Weekly Insights Workflow",
             description=(
                 "Generates enterprise-wide insights for admin users by analyzing "
@@ -475,7 +475,6 @@ def build_workflow(
                 "(revenue per customer) and identify top performers and improvement opportunities."
             ),
         )
-        .set_start_executor(context_collector)
         .add_edge(context_collector, performance_analyzer)
         .add_edge(performance_analyzer, insight_synthesizer)
         .build()

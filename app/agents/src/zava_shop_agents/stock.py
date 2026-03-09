@@ -1,12 +1,11 @@
 # Copyright (c) Microsoft. All rights reserved.
 import os
-from typing import Sequence, cast
+from typing import Any, Sequence, cast
 
 from agent_framework import (
-    ChatAgent,
-    ChatMessage,
+    Agent,
+    Message,
     Executor,
-    ToolProtocol,
     WorkflowBuilder,
     WorkflowContext,
     Workflow,
@@ -51,11 +50,11 @@ DEFAULT_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
 class StockExtractor(Executor):
     """Custom executor that extracts stock information from messages."""
 
-    agent: ChatAgent
+    agent: Agent
 
-    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+    def __init__(self, client: AzureAIClient, tools: Any | Sequence[Any], agent_suffix: str = ""):
         _id = "stock-extractor-agent" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -70,7 +69,7 @@ class StockExtractor(Executor):
         super().__init__(id=_id)
 
     @handler
-    async def handle(self, message: ChatMessage, ctx: WorkflowContext[StockExtractorResult]) -> None:
+    async def handle(self, message: Message, ctx: WorkflowContext[StockExtractorResult]) -> None:
         """Extract department data"""
         response = await self.agent.run(message, response_format=StockItemCollection)
         value = cast(StockItemCollection, response.value)
@@ -85,11 +84,11 @@ class StockExtractor(Executor):
 class ContextExecutor(Executor):
     """Custom executor that provides context about the user request."""
 
-    agent: ChatAgent
+    agent: Agent
 
     def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
         _id = "stock-context-agent" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=("You look at the context to prioritize restocking items."),
@@ -121,12 +120,12 @@ class Summarizer(Executor):
     - Yielding the final text outcome to complete the workflow.
     """
 
-    agent: ChatAgent
+    agent: Agent
 
     def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
         _id = "stock-summarizer-agent" + agent_suffix
         # Create a domain specific agent that summarizes content.
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             id=_id,
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
@@ -142,7 +141,7 @@ class Summarizer(Executor):
 
     @handler
     async def handle(
-        self, stock_result: StockExtractorResult, ctx: WorkflowContext[list[ChatMessage], RestockResult]
+        self, stock_result: StockExtractorResult, ctx: WorkflowContext[list[Message], RestockResult]
     ) -> None:
         """Review the full conversation transcript and complete with a final string.
 
@@ -157,7 +156,7 @@ class Summarizer(Executor):
 def build_workflow(
     credential: AsyncTokenCredential | None = None,
     project_endpoint: str | None = None,
-    mcp: ToolProtocol | Sequence[ToolProtocol] | None = None,
+    mcp: Any | Sequence[Any] | None = None,
     agent_suffix: str = "",
     user_token: str | None = None,
 ) -> Workflow:
@@ -195,10 +194,10 @@ def build_workflow(
 
     workflow = (
         WorkflowBuilder(
+            start_executor=stock,
             name="Restocking Workflow",
             description="A workflow to manage stock restocking based on user requests.",
         )
-        .set_start_executor(stock)
         .add_edge(stock, context)
         .add_edge(context, summarizer)
         .build()

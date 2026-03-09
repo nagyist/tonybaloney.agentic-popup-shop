@@ -5,6 +5,7 @@ description = "MCP server for the shop application"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=2.11.0,<3.0.0",
+    "httpx<1.0.0",
     "opentelemetry-instrumentation-mcp",
     "opentelemetry-instrumentation-sqlalchemy",
     "opentelemetry-exporter-otlp",
@@ -33,3 +34,9 @@ zava-shop-shared = { path = "../shared", editable = true }
 [build-system]
 requires = ["uv_build>=0.9.3,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = [
+    "asyncio: mark async tests",
+]

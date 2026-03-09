@@ -89,6 +89,7 @@ async def get_customer_orders(
             order_date=order_row.order_date.isoformat(),
             store_id=order_row.store_id,
             store_name=order_row.store_name,
+            store_location=order_row.store_name,
             items=order_items,
             total_items=total_items,
             order_total=order_total,

@@ -291,6 +291,7 @@ class OrderResponse(BaseModel):
     order_date: str = Field(..., description="Order date (YYYY-MM-DD)")
     store_id: int = Field(..., description="Store identifier")
     store_name: str = Field(..., description="Store name")
+    store_location: str = Field(..., description="Store location")
     items: List[OrderItemResponse] = Field(..., description="Order items")
     total_items: int = Field(..., description="Total number of items")
     order_total: float = Field(..., description="Total order amount")

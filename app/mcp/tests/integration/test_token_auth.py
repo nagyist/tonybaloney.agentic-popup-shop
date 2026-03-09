@@ -32,6 +32,12 @@ except Exception:
     MCP_MODULES_AVAILABLE = False
     finance_auth = finance_mcp = supplier_auth = supplier_mcp = KeycloakAuthProvider = None
 
+try:
+    import zava_shop_agents  # noqa: F401
+    AGENTS_MODULES_AVAILABLE = True
+except Exception:
+    AGENTS_MODULES_AVAILABLE = False
+
 
 @pytest.mark.skipif(not MCP_MODULES_AVAILABLE, reason="MCP modules not available")
 class TestMCPAuthorizationHeaderHandling:
@@ -151,6 +157,7 @@ class TestTokenPropagationIntegration:
     Frontend token → API → Agent → MCP with auth
     """
 
+    @pytest.mark.skipif(not AGENTS_MODULES_AVAILABLE, reason="zava_shop_agents not available")
     def test_mcp_http_tool_configuration(self):
         """
         MCPStreamableHTTPToolOTEL should be configured with Authorization header.
@@ -162,6 +169,7 @@ class TestTokenPropagationIntegration:
         source = inspect.getsource(MCPStreamableHTTPToolOTEL)
         assert 'self.headers["traceparent"]' in source
         
+    @pytest.mark.skipif(not AGENTS_MODULES_AVAILABLE, reason="zava_shop_agents not available")
     def test_workflow_mcp_configuration_uses_token(self):
         """
         Build workflow functions should configure MCP with user token.

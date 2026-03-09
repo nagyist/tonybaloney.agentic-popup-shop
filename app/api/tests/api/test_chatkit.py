@@ -70,6 +70,7 @@ class TestChatKitAuthentication:
         assert "customer" in data["detail"].lower()
 
 
+@pytest.mark.asyncio
 class TestChatKitSessionCreation:
     """Tests for ChatKit session creation functionality."""
     
@@ -144,6 +145,7 @@ class TestChatKitSessionCreation:
         assert "user_agent" in context
 
 
+@pytest.mark.asyncio
 class TestChatKitMessaging:
     """Tests for ChatKit message handling functionality."""
     
@@ -214,6 +216,7 @@ class TestChatKitMessaging:
         assert mock_process.called
 
 
+@pytest.mark.asyncio
 class TestChatKitErrorHandling:
     """Tests for ChatKit error handling."""
     
@@ -242,7 +245,7 @@ class TestChatKitErrorHandling:
         
         assert response.status_code == 500
     
-    def test_chatkit_handles_malformed_request(
+    async def test_chatkit_handles_malformed_request(
         self,
         test_client: TestClient,
         customer_auth_headers: dict
@@ -301,6 +304,7 @@ class TestChatKitIntegration:
         assert response.status_code not in [404, 405]
 
 
+@pytest.mark.asyncio
 class TestChatKitDataStore:
     """Tests for ChatKit data store functionality."""
     
