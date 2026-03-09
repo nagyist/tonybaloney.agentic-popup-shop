@@ -13,10 +13,10 @@ dependencies = [
 
     # Chatkit
     "openai-chatkit",
-    "agent-framework-chatkit==1.0.0b260116",
+    "agent-framework-chatkit==1.0.0b260304",
 
     # Azure AI preview
-    "agent-framework-azure-ai==1.0.0b260116",
+    "agent-framework-azure-ai==1.0.0rc3",
     "aiohttp",
 
     "azure-monitor-opentelemetry",

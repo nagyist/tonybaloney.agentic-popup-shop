@@ -3,20 +3,18 @@
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional, Sequence, Union, cast
+from typing import Any, List, Optional, Sequence, Union, cast
 
 import httpx
 from pydantic import Field
 from agent_framework import (
-    ChatAgent,
+    Agent,
     Executor,
-    ToolProtocol,
     Workflow,
     WorkflowBuilder,
     WorkflowContext,
     WorkflowEvent,
     handler,
-    HostedWebSearchTool,
 )
 from agent_framework_azure_ai import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
@@ -421,7 +419,7 @@ class WeatherAnalyzer(Executor):
 
     def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
         _id = "weather-analyzer" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -552,7 +550,7 @@ class EventsAnalyzer(Executor):
 
     def __init__(self, client: AzureAIClient, agent_suffix: str = ""):
         _id = "events-analyzer" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -569,7 +567,7 @@ class EventsAnalyzer(Executor):
                 "'No major upcoming events expected in the next 21 days.' "
                 "Always return your answer as JSON that matches the provided response schema."
             ),
-            tools=[HostedWebSearchTool(description="Search for local events")],
+            tools=[client.get_web_search_tool()],
         )
         super().__init__(id=_id)
 
@@ -673,12 +671,12 @@ class EventsAnalyzer(Executor):
 class TopSellingProductsAnalyzer(Executor):
     """Analyzes top selling products using Finance MCP tools."""
 
-    agent: ChatAgent
+    agent: Agent
 
-    def __init__(self, client: AzureAIClient, tools: ToolProtocol | Sequence[ToolProtocol], agent_suffix: str = ""):
+    def __init__(self, client: AzureAIClient, tools: Any | Sequence[Any], agent_suffix: str = ""):
         # Create an agent with Finance MCP tools
         _id = "top-selling-products-analyzer" + agent_suffix
-        self.agent = client.create_agent(
+        self.agent = client.as_agent(
             name=_id,
             description=WORKFLOW_AGENT_DESCRIPTION,
             instructions=(
@@ -892,7 +890,7 @@ class InsightSynthesizer(Executor):
 def build_workflow(
     credential: AsyncTokenCredential | None = None,
     project_endpoint: str | None = None,
-    tools: Sequence[ToolProtocol] | None = None,
+    tools: Sequence[Any] | None = None,
     agent_suffix: str = "",
     user_token: str | None = None,
 ) -> Workflow:
@@ -945,13 +943,13 @@ def build_workflow(
 
     workflow = (
         WorkflowBuilder(
+            start_executor=data_collector,
             name="Weekly Insights Workflow",
             description="Generates actionable retail insights by analyzing weather patterns, "
             "local events, and top selling products. Uses parallel data gathering (fan-out) and "
             "intelligent synthesis (fan-in) to provide store managers with "
             "context-aware stocking recommendations.",
         )
-        .set_start_executor(data_collector)
         .add_fan_out_edges(
             data_collector,
             [weather_analyzer, events_analyzer, top_selling_products_analyzer],

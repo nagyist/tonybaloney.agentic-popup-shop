@@ -1,12 +1,19 @@
+import os
+
 from typing import Annotated
 
 from azure.identity.aio import DefaultAzureCredential
 
 import pytest
-from agent_framework import ai_function, ChatMessage, ExecutorCompletedEvent, WorkflowOutputEvent
+from agent_framework import tool
 from pydantic import Field
 
 from zava_shop_agents.stock import RestockResult, StockItem, StockItemCollection, build_workflow
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("AZURE_AI_PROJECT_ENDPOINT"),
+    reason="AZURE_AI_PROJECT_ENDPOINT is not configured for integration tests",
+)
 
 
 @pytest.fixture
@@ -35,7 +42,7 @@ async def test_simple_path(azure_credential):
                 ),
             ]
 
-    @ai_function
+    @tool
     def get_current_inventory_status(
         store_id: Annotated[int, Field(description="Store ID to filter results")] = -1,
         category_name: Annotated[str, Field(description="Category name to filter results")] = "",
@@ -75,16 +82,15 @@ async def test_simple_path(azure_credential):
         )
 
     workflow = build_workflow(credential=azure_credential, mcp=[get_current_inventory_status], agent_suffix="-test")  # pyright: ignore[reportArgumentType]
-    test_message = ChatMessage(role="user", text="Help me restock store 1")
-    result = await workflow.run(test_message)
+    result = await workflow.run("Help me restock store 1")
 
-    executor_completions = [event for event in result if isinstance(event, ExecutorCompletedEvent)]
+    executor_completions = [event for event in result if getattr(event, "type", None) == "executor_completed"]
     assert len(executor_completions) == 3  # Three executors should complete
 
     # You can inspect executor messages here if needed
 
     # Get the workflow output
-    workflow_outputs = [event for event in result if isinstance(event, WorkflowOutputEvent)]
+    workflow_outputs = [event for event in result if getattr(event, "type", None) == "output"]
     assert len(workflow_outputs) == 1
 
     assert workflow_outputs[0].data is not None
@@ -101,7 +107,7 @@ async def test_simple_path(azure_credential):
 async def test_no_restock_needed_path(azure_credential):
     """Demonstrate only having useless tools."""
 
-    @ai_function
+    @tool
     def sing_a_song(lyrics: Annotated[str, Field(description="Lyrics to sing")]) -> str:
         """
         Sing a song with the given lyrics.
@@ -111,14 +117,13 @@ async def test_no_restock_needed_path(azure_credential):
     workflow = build_workflow(credential=azure_credential, mcp=[sing_a_song], agent_suffix="-test")  # pyright: ignore[reportArgumentType]
 
 
-    test_message = ChatMessage(role="user", text="Help me restock store 1")
-    result = await workflow.run(test_message)
+    result = await workflow.run("Help me restock store 1")
 
-    executor_completions = [event for event in result if isinstance(event, ExecutorCompletedEvent)]
+    executor_completions = [event for event in result if getattr(event, "type", None) == "executor_completed"]
     assert len(executor_completions) == 3  # Three executors should complete
 
     # Get the workflow output
-    workflow_outputs = [event for event in result if isinstance(event, WorkflowOutputEvent)]
+    workflow_outputs = [event for event in result if getattr(event, "type", None) == "output"]
     assert len(workflow_outputs) == 1
 
     # There should not be any items to restock

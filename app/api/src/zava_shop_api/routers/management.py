@@ -3,14 +3,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from agent_framework import (
-    ChatMessage,
-    ExecutorCompletedEvent,
-    ExecutorFailedEvent,
-    ExecutorInvokedEvent,
-    WorkflowOutputEvent,
-    WorkflowStartedEvent,
-)
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi_cache.decorator import cache
 from pydantic import BaseModel
@@ -209,7 +201,7 @@ async def get_weekly_insights(
         fallback_payload: Optional[str] = None
 
         async for event in workflow.run_stream(agent_input):
-            if isinstance(event, ExecutorFailedEvent):
+            if event.type == "executor_failed":
                 logger.error(
                     "Insights workflow failed in executor %s: %s",
                     event.executor_id,
@@ -218,7 +210,7 @@ async def get_weekly_insights(
                 fallback_payload = event.details.message or "Insights workflow failed"
                 break
 
-            if isinstance(event, WorkflowOutputEvent):
+            if event.type == "output":
                 payload = event.data
                 if isinstance(payload, BaseModel):
                     payload = payload.model_dump()
@@ -503,7 +495,7 @@ async def get_inventory(
             # Summary query - get statistics across ALL matching records
             summary_stmt = (
                 select(
-                    func.count(func.distinct(ProductModel.product_id)).label("total_items"),
+                    func.count().label("total_items"),
                     func.sum(case((InventoryModel.stock_level < low_stock_threshold, 1), else_=0)).label(
                         "low_stock_count"
                     ),
@@ -830,37 +822,37 @@ async def websocket_ai_agent_inventory(
         else:
             full_message = input_message
 
-        input: ChatMessage = ChatMessage(role="user", text=full_message)
+        workflow_input = full_message
 
         workflow_output = None
         workflow = stock_workflow(user_token=current_user.access_token)
         try:
-            async for event in workflow.run_stream(input):
+            async for event in workflow.run_stream(workflow_input):
                 now = datetime.now(timezone.utc).isoformat()
-                if isinstance(event, WorkflowStartedEvent):
+                if event.type == "started":
                     event_data = {"type": "workflow_started", "event": str(event.data), "timestamp": now}
-                elif isinstance(event, WorkflowOutputEvent):
+                elif event.type == "output":
                     # Capture the workflow output (markdown result)
                     if isinstance(event.data, BaseModel):
                         workflow_output = event.data.model_dump()
                     else:
                         workflow_output = str(event.data)
                     event_data = {"type": "workflow_output", "event": workflow_output, "timestamp": now}
-                elif isinstance(event, ExecutorInvokedEvent):
+                elif event.type == "executor_invoked":
                     event_data = {
                         "type": "step_started",
                         "event": event.data,
                         "id": event.executor_id,
                         "timestamp": now,
                     }
-                elif isinstance(event, ExecutorCompletedEvent):
+                elif event.type == "executor_completed":
                     event_data = {
                         "type": "step_completed",
                         "event": event.data,
                         "id": event.executor_id,
                         "timestamp": now,
                     }
-                elif isinstance(event, ExecutorFailedEvent):
+                elif event.type == "executor_failed":
                     event_data = {
                         "type": "step_failed",
                         "event": event.details.message,

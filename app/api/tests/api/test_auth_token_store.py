@@ -3,6 +3,7 @@ Tests for SQLite-based token store with expiry.
 """
 
 import pytest
+import pytest_asyncio
 from zava_shop_api.auth import (
     SQLiteTokenStore,
     authenticate_user,
@@ -13,7 +14,7 @@ from zava_shop_api.auth import (
 from zava_shop_api.models import TokenData
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def token_store():
     """Create a test token store with in-memory database."""
     store = SQLiteTokenStore("sqlite+aiosqlite:///:memory:")

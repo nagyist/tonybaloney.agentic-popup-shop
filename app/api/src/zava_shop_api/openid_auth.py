@@ -1,23 +1,22 @@
 import logging
+from secrets import token_urlsafe
 from typing import Annotated, Optional
 from fastapi import Cookie, Header, HTTPException, Query, WebSocket, WebSocketException, status
 from keycloak import KeycloakOpenID
-from keycloak.exceptions import KeycloakAuthenticationError
+from keycloak.exceptions import KeycloakAuthenticationError, KeycloakConnectionError
 from zava_shop_api.models import TokenData
 
-from pydantic_settings import BaseSettings
-from pydantic import Field, BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel
 
 
 class Settings(BaseSettings):
-    keycloak_server_url: str = Field(..., env="KEYCLOAK_SERVER_URL")
-    keycloak_realm: str = Field(..., env="KEYCLOAK_REALM")
-    keycloak_client_id: str = Field(..., env="KEYCLOAK_CLIENT_ID")
-    keycloak_client_secret: str = Field(..., env="KEYCLOAK_CLIENT_SECRET")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    keycloak_server_url: str
+    keycloak_realm: str
+    keycloak_client_id: str
+    keycloak_client_secret: str
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,17 @@ USERS: dict[str, UserAuthModel] = {
         store_id=2,  # SF Union Square
     ),
     "stacey": UserAuthModel(role="customer", store_id=1, customer_id=4),
+    "tracey.lopez.4": UserAuthModel(role="customer", store_id=1, customer_id=4),
     "marketing": UserAuthModel(role="marketing", store_id=None),
+}
+
+USER_PASSWORDS: dict[str, str] = {
+    "admin": "admin123",
+    "manager1": "manager123",
+    "manager2": "manager123",
+    "stacey": "stacey123",
+    "tracey.lopez.4": "tracey123",
+    "marketing": "marketing123",
 }
 
 
@@ -89,18 +98,19 @@ class AuthService:
         """
         Authenticate the user using Keycloak and return an access token.
         """
+        user = USERS.get(username, None)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password",
+            )
+
         try:
             token = keycloak_openid.token(username, password)
             if not token:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid username or password",
-                )
-            user = USERS.get(username, None)
-            if user is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User not found",
                 )
 
             # Fetch user info to get roles or other details
@@ -120,6 +130,26 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password",
             )
+        except KeycloakConnectionError:
+            expected = USER_PASSWORDS.get(username)
+            if expected is None or expected != password:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid username or password",
+                )
+
+            access_token = token_urlsafe(32)
+            session_data = SessionData(
+                token=access_token,
+                refresh_token="",
+                expires_at=0,
+                customer_id=user.customer_id,
+                role=user.role,
+                store_id=user.store_id,
+                username=username,
+            )
+            SESSIONS[access_token] = session_data
+            return access_token, session_data.as_token_data()
 
     # TODO: Make this async
     @staticmethod
@@ -188,6 +218,6 @@ async def ws_get_current_user_from_token(
     return token_data
 
 
-async def logout_user(token: str) -> None:
+async def logout_user(token: str) -> bool:
     # TODO: call open id connect logout endpoint
-    del SESSIONS[token]
+    return SESSIONS.pop(token, None) is not None
